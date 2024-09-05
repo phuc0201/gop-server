@@ -127,3 +127,4 @@ dist
 .pnp.*
 
 src/utils/firebase/serviceAccount.json
+.vercel
