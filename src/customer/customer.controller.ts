@@ -48,6 +48,7 @@ export class CustomerController implements ICustomerController {
   }
   
   // ACCOUNT MANAGEMT
+  @Roles(RoleType.CUSTOMER)
   @Get('profile')
   async getProfile(@Req() req: RequestWithUser, @Res() res: Response) {
     return await this.customerService.findOneById(req.user.sub).then(profile => {

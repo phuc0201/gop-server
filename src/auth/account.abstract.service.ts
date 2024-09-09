@@ -1,12 +1,8 @@
-import { FindAllResponse } from "src/utils/interfaces";
 import { Account } from "./entities/account.schema";
 import { FilterQuery, Model, QueryOptions } from "mongoose";
 import { BaseServiceAbstract } from "src/utils/repository/base.service";
 import { CreateAccountDto } from "./dto";
 import * as argon2 from 'argon2'
-import { JwtService } from "@nestjs/jwt";
-import { RoleType } from "src/utils/enums";
-import { ConfigService } from "@nestjs/config";
 import { ConflictException } from "@nestjs/common";
 
 export abstract class AccountServiceAbstract <T extends Account> extends BaseServiceAbstract<T>{
@@ -23,10 +19,12 @@ export abstract class AccountServiceAbstract <T extends Account> extends BaseSer
   
 
   async signUp<T extends CreateAccountDto>(dto: T) {
-      let account = await this.findOneByCondition({email: dto.email});
-      if (account) {
+      let account = await this.findOneByCondition({
+          $or: [{ email: dto.email }, { phone: dto.phone }],
+      });
+      if (account) 
           return null;
-      }
+
       dto.password = await argon2.hash(dto.password);
 
       return this.create(dto);

@@ -13,7 +13,7 @@ export class Customer extends Account{
     @Prop({ default: true })
     gender: boolean //* male: true
 
-    @Prop({ default: 'https://gopstorage0.blob.core.windows.net/appicon/default_avt.jpg' })
+    @Prop({ default: '' })
     avatar: string
 }
 

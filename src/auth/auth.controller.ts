@@ -42,10 +42,10 @@ export class AuthController {
   private sign_up(body: CreateAccountDto, res: Response, service: AccountServiceAbstract<Account>){
     service.signUp(body).then(async (account) => {
       if (!account) {
-        return res.status(HttpStatus.CONFLICT).json({message: 'Email is already in use'});
+        return res.status(HttpStatus.CONFLICT).json({message: 'Email or phone_number is already in use'});
       }
-      this.accountService.sendNotification(account.email, account.full_name);
-      return res.status(HttpStatus.CREATED).json({message: 'OK'});
+      // this.accountService.sendNotification(account.email, account.full_name);
+      return res.status(HttpStatus.CREATED).json({message: 'OK'})
     }).catch((err) => {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({message: err.message});
     });
@@ -55,10 +55,10 @@ export class AuthController {
   async signupCustomer(@Body() body: createCustomerDto , @Res() res: Response) {
     this.customerService.signUp(body).then(async (account) => {
       if (!account) {
-        return res.status(HttpStatus.CONFLICT).json({message: 'Email is already in use'});
+        return res.status(HttpStatus.CONFLICT).json({message: 'Email or phone_number is already in use'});
       }
-      this.accountService.sendOTPMail(account.email, account.full_name, account._id, OTPType.VERIFY_ACCOUNT);
-      return res.status(HttpStatus.CREATED).json({message: 'OK'});
+      return res.status(HttpStatus.CREATED).json({message: 'OK'})
+      // this.accountService.sendOTPMail(account.email, account.full_name, account._id, OTPType.VERIFY_ACCOUNT);
     }).catch((err) => {
       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({message: err.message});
     });
@@ -78,7 +78,7 @@ export class AuthController {
   private sign_in(body: SigninDto, res: Response, service: AccountServiceAbstract<Account>){
     service.signIn(body.email, body.password).then(async (msg) => {
       if (msg.code === '1') {
-        this.accountService.sendOTPMail(msg.data.email, msg.data.full_name, msg.data._id, OTPType.VERIFY_ACCOUNT);
+        // this.accountService.sendOTPMail(msg.data.email, msg.data.full_name, msg.data._id, OTPType.VERIFY_ACCOUNT);
         return res.status(HttpStatus.FORBIDDEN).json({message: 'Email has not been verified'});
       } else if (msg.code === '2') {
         return res.status(HttpStatus.NOT_FOUND).json({message: 'Email or Password is incorrect'});

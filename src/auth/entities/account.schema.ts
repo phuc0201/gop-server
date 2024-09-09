@@ -1,10 +1,9 @@
 import { Prop } from "@nestjs/mongoose";
-import { Document } from "mongoose";
 import { BaseEntity } from "src/utils/repository/base.entity";
 
 
 export class Account extends BaseEntity{
-    @Prop({ unique: true, sparse: true })
+    @Prop({ unique: true, sparse: true, required: true })
     phone: string
 
     @Prop({ required: true, unique: true })
@@ -19,7 +18,7 @@ export class Account extends BaseEntity{
     @Prop()
     refresh_token?: string
 
-    @Prop({ default: false })
+    @Prop({ default: true })
     verified: boolean
 
     @Prop({ default: 0 })

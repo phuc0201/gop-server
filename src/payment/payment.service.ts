@@ -103,8 +103,16 @@ export class PaymentService {
   }
 
   async getAllCampaign(): Promise<Campaign[]>{
+    const currDate = new Date();
     const campaign = await this.campaignModel.find();
-    return campaign;
+    const cmp = campaign.filter(cp => {
+      if( cp.conditions.start_time <= currDate &&
+        cp.conditions.end_time >= currDate){
+          return true;
+      }
+      return false;
+    })
+    return cmp;
   }
 
   async getCampaignByOwnerId(id: string): Promise<Campaign[]> {

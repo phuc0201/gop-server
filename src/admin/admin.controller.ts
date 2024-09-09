@@ -23,26 +23,6 @@ export class AdminController implements IAdminController, ICampaign{
     throw new Error('Method not implemented.');
   }
 
-  @Get(':id/categories')
-  async fetchCategoriesByCustomer(@Param('id') id: string) {
-    try {
-      const categories = await this.restaurantService.findCategoriesByCustomer(id);
-      return categories;
-    } catch (error) {
-      throw new Error('Failed')
-    }
-  }
-
-  @Get('fooditems')
-  async fetchFoodItems(
-    @Query('page') page: number = 1, 
-    @Query('limit') limit: number = 10,
-    @Query('category_id') category_id?: string) {
-    return await this.restaurantService.getFoodItems(page, limit, category_id);
-  }
-
-
-
   @Get('customer/:id/order-history')
   async OrderHistoryByCustomerId(@Param('id') id: string) {
     return await this.orderService.findCusOrderHistoryByAdmin(id)
