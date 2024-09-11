@@ -415,15 +415,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
   async getInfoByCustomer(id: string, coordinates: number[]) {
     const customerLocation = new LocationObject(coordinates, '');
-    // const restaurant = await this.restaurantModel.findById(id, {
-    //   balance: 0,
-    //   verified: 0,
-    //   deleted_at: 0,
-    //   email: 0,
-    //   password: 0,
-    //   refresh_token: 0,
-    //   full_name: 0,
-    // }).lean();
     const objectId = new ObjectId(id);
     const restaurant = await this.restaurantModel.aggregate([
       {
@@ -473,7 +464,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       ]),
     ]);
 
-    const rating = ratingResult.length > 0 ? ratingResult[0].averageRating : 0;
+    const rating = ratingResult.length > 0 ? parseFloat(ratingResult[0].averageRating.toFixed(1)) : 0;
 
     return {
       ...restaurant[0],
