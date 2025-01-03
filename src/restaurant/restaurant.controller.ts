@@ -1,4 +1,18 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, BadRequestException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query,
+  BadRequestException,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
 import { RestaurantService } from './restaurant.service';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
@@ -6,9 +20,19 @@ import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/utils/guards/roles.guard';
 import { Roles } from 'src/utils/decorators/roles.decorator';
-import { OTPType, OTPVerifyStatus, OrderStatus, RestaurantStatus, RoleType } from 'src/utils/enums';
+import {
+  OTPType,
+  OTPVerifyStatus,
+  OrderStatus,
+  RestaurantStatus,
+  RoleType,
+} from 'src/utils/enums';
 import { AuthService } from 'src/auth/auth.service';
-import { ICampaign, IRestaurantController, RequestWithUser } from 'src/utils/interfaces';
+import {
+  ICampaign,
+  IRestaurantController,
+  RequestWithUser,
+} from 'src/utils/interfaces';
 import { CreateRestaurantCategoryDto } from './dto/create-restaurant-category.dto';
 import { UpdateItemsRestaurantDto } from './dto/update-item-restaurant-category.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -24,35 +48,35 @@ import { CreateCampaignDto } from 'src/payment/dto/create-campaign.dto';
 import { UpdateCampaignnDto } from 'src/payment/dto/update-campaign.dto';
 import { ReviewDto } from './dto/review.dto';
 import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
-
+import { query } from 'express';
 
 @ApiBearerAuth()
 @ApiTags('Restaurants')
 @Controller('api/v1/restaurant')
-export class RestaurantController implements IRestaurantController, ICampaign{
+export class RestaurantController {
   constructor(
     private readonly restaurantService: RestaurantService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly paymentService: PaymentService
+    private readonly paymentService: PaymentService,
   ) {}
 
   @Get('cuisine-categories')
   fetchCuisineCategories() {
-    try { 
+    try {
       const cuisines = this.restaurantService.getCuisineCategories();
       return cuisines;
     } catch (error) {
-      throw new Error(error)
+      throw new Error(error);
     }
   }
 
   @Post('cuisine-category')
-  createCuisineCategory(@Body() body: { name: string, slug: string }) {
+  createCuisineCategory(@Body() body: { name: string; slug: string }) {
     try {
       const cuisine = this.restaurantService.createCuisineCategory(body);
       return cuisine;
     } catch (error) {
-      throw new Error(error)
+      throw new Error(error);
     }
   }
 
@@ -63,22 +87,25 @@ export class RestaurantController implements IRestaurantController, ICampaign{
     try {
       return await this.restaurantService.createReview(body);
     } catch (error) {
-      throw new Error("create review failed")
+      throw new Error('create review failed');
     }
   }
 
   @Get(':id/reviews')
-  async findReviewsByResId(@Param('id') id: string){
+  async findReviewsByResId(@Param('id') id: string) {
     try {
       const reviews = await this.restaurantService.getReivewsByRes(id);
       return reviews;
     } catch (error) {
-      throw new Error(error) 
+      throw new Error(error);
     }
   }
 
   @Post('info/:id')
-  fetchInfoByCustomer(@Param('id') id: string, @Body() body: { coordinates: number[] }) {
+  fetchInfoByCustomer(
+    @Param('id') id: string,
+    @Body() body: { coordinates: number[] },
+  ) {
     return this.restaurantService.getInfoByCustomer(id, body.coordinates);
   }
 
@@ -101,9 +128,20 @@ export class RestaurantController implements IRestaurantController, ICampaign{
     return await this.restaurantService.getMenu(req.user.sub);
   }
 
-  @Post('recommended')
-  async getRestaurants(@Body() body: GetRestaurantsQueryDto) {
-    const res = await this.restaurantService.getRestaurantsByCustomer(body);
+  @Get('recommended')
+  async getRestaurants(@Query() query: GetRestaurantsQueryDto) {
+    const { coordinates, page, limit, searchQuery, cuisineId } = query;
+    const parsedCoordinates = coordinates.split(',').map(Number);
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const res = await this.restaurantService.getRestaurantsByCustomer(
+      parsedCoordinates,
+      parsedPage,
+      parsedLimit,
+      searchQuery,
+      cuisineId,
+    );
+
     return res;
   }
 
@@ -140,12 +178,18 @@ export class RestaurantController implements IRestaurantController, ICampaign{
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Patch('info/update')
-  async updateRestaurant(@Req() req: RequestWithUser, @Body() body: UpdateRestaurantDto): Promise<any> {
+  async updateRestaurant(
+    @Req() req: RequestWithUser,
+    @Body() body: UpdateRestaurantDto,
+  ): Promise<any> {
     try {
-      const restaurant = await this.restaurantService.updateRestaurant(req.user.sub, body);
+      const restaurant = await this.restaurantService.updateRestaurant(
+        req.user.sub,
+        body,
+      );
       return restaurant;
     } catch (error) {
-      return error
+      return error;
     }
   }
 
@@ -189,69 +233,100 @@ export class RestaurantController implements IRestaurantController, ICampaign{
   @Roles(RoleType.RESTAURANT)
   @Get('category')
   fetchCategory(@Req() req: RequestWithUser) {
-    return this.restaurantService.findCategoryByRestaurant(req.user.sub)
+    return this.restaurantService.findCategoryByRestaurant(req.user.sub);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Post('category/create')
-  async createCategory(@Req() req: RequestWithUser, @Body() body: CreateRestaurantCategoryDto): Promise<any> {
+  async createCategory(
+    @Req() req: RequestWithUser,
+    @Body() body: CreateRestaurantCategoryDto,
+  ): Promise<any> {
     try {
-      const restaurant = await this.restaurantService.addCategory(req.user.sub, body)
+      const restaurant = await this.restaurantService.addCategory(
+        req.user.sub,
+        body,
+      );
       return restaurant;
     } catch (error) {
-      return error
+      return error;
     }
   }
 
   @Roles(RoleType.RESTAURANT)
   @Post('category/:id/update-image')
   @UseInterceptors(FileInterceptor('image'))
-  updateCategoryImage(@Param('id') cate_id: string, @UploadedFile() image: Express.Multer.File) {
-    const uploadImage = this.restaurantService.updateCategoryImg(cate_id, image);
+  updateCategoryImage(
+    @Param('id') cate_id: string,
+    @UploadedFile() image: Express.Multer.File,
+  ) {
+    const uploadImage = this.restaurantService.updateCategoryImg(
+      cate_id,
+      image,
+    );
     return uploadImage;
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Patch('category/:id/update')
-  async updateCategory(@Req() req: RequestWithUser, @Param('id') id: string, @Body() body: UpdateRestaurantCategoryDto): Promise<any> {
-     try {
-      const restaurant = await this.restaurantService.updateCategory(req.user.sub, id, body)
+  async updateCategory(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Body() body: UpdateRestaurantCategoryDto,
+  ): Promise<any> {
+    try {
+      const restaurant = await this.restaurantService.updateCategory(
+        req.user.sub,
+        id,
+        body,
+      );
       return restaurant;
     } catch (error) {
-      return error
+      return error;
     }
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Delete('category/:id/delete')
-  async deleteCategory(@Req()  req: RequestWithUser, @Param('id') id: string): Promise<any> {
+  async deleteCategory(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+  ): Promise<any> {
     try {
-      const category = await this.restaurantService.
-      deleteCategory(id, req.user.sub)
+      const category = await this.restaurantService.deleteCategory(
+        id,
+        req.user.sub,
+      );
       return category;
     } catch (error) {
-      return error
+      return error;
     }
   }
 
   @Get('fooditem/:id')
   async fetchFoodDetails(@Param('id') id: string) {
-    const foodItem = await this.restaurantService.getFooditemDetails(id)
-    return foodItem
+    const foodItem = await this.restaurantService.getFooditemDetails(id);
+    return foodItem;
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Post('fooditem/create')
-  async createFoodItem(@Req() req: RequestWithUser, @Body() body: CreateFoodItemDto): Promise<any> {
+  async createFoodItem(
+    @Req() req: RequestWithUser,
+    @Body() body: CreateFoodItemDto,
+  ): Promise<any> {
     try {
-      const foodItem = await this.restaurantService.createFoodItem(req.user.sub, body);
+      const foodItem = await this.restaurantService.createFoodItem(
+        req.user.sub,
+        body,
+      );
       return foodItem;
     } catch (error) {
-      return error
+      return error;
     }
   }
 
@@ -266,17 +341,30 @@ export class RestaurantController implements IRestaurantController, ICampaign{
   @Roles(RoleType.RESTAURANT)
   @Post('fooditem/:id/update-image')
   @UseInterceptors(FileInterceptor('image'))
-  updateFoodItemImage(@Param('id') food_item_id: string, @UploadedFile() image: Express.Multer.File) {
-    const uploadImage = this.restaurantService.updateFoodItemImg(food_item_id, image);
+  updateFoodItemImage(
+    @Param('id') food_item_id: string,
+    @UploadedFile() image: Express.Multer.File,
+  ) {
+    const uploadImage = this.restaurantService.updateFoodItemImg(
+      food_item_id,
+      image,
+    );
     return uploadImage;
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Post('fooditem/delete')
-  async deleteFoodItem(@Req() req: RequestWithUser, @Body() body: { category_id: string, foodItem_id: string }): Promise<any> {
+  async deleteFoodItem(
+    @Req() req: RequestWithUser,
+    @Body() body: { category_id: string; foodItem_id: string },
+  ): Promise<any> {
     try {
-      const foodItems = await this.restaurantService.deleteFoodItem(req.user.sub, body.category_id, body.foodItem_id);
+      const foodItems = await this.restaurantService.deleteFoodItem(
+        req.user.sub,
+        body.category_id,
+        body.foodItem_id,
+      );
       return foodItems;
     } catch (error) {
       throw new Error('Delete fooditem failed');
@@ -290,7 +378,10 @@ export class RestaurantController implements IRestaurantController, ICampaign{
       if (!image) {
         throw new BadRequestException('file is required');
       }
-      return this.restaurantService.updateFoodItemImg('6647a4011216ae8cfd4a9c21', image)
+      return this.restaurantService.updateFoodItemImg(
+        '6647a4011216ae8cfd4a9c21',
+        image,
+      );
     } catch (error) {
       return error;
     }
@@ -303,54 +394,57 @@ export class RestaurantController implements IRestaurantController, ICampaign{
     throw new Error('Method not implemented.');
   }
 
-  @Roles(RoleType.RESTAURANT)
-  @Get(':id/campaigns')
-  async getCampaignsByOwnerId(@Param('id') id: string): Promise<any> {
-    return await this.paymentService.getCampaignByOwnerId(id); 
-  }
+  // @Roles(RoleType.RESTAURANT)
+  // @Get(':id/campaigns')
+  // async getCampaignsByOwnerId(@Param('id') id: string): Promise<any> {
+  //   return await this.paymentService.getCampaignByOwnerId(id);
+  // }
 
-  @Roles(RoleType.RESTAURANT)
-  @Get('campaign/:id')
-  getCampaignDetails(): Promise<any> {
-    throw new Error('Method not implemented.');
-  }
+  // @Roles(RoleType.RESTAURANT)
+  // @Get('campaign/:id')
+  // getCampaignDetails(): Promise<any> {
+  //   throw new Error('Method not implemented.');
+  // }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(RoleType.RESTAURANT)
-  @Post('campaign/create')
-  async createCampaign(@Body() body: CreateCampaignDto): Promise<any> {
-    return await this.paymentService.createCampaign(body);
-  }
+  // @UseGuards(AuthGuard('jwt'), RolesGuard)
+  // @Roles(RoleType.RESTAURANT)
+  // @Post('campaign/create')
+  // async createCampaign(@Body() body: CreateCampaignDto): Promise<any> {
+  //   return await this.paymentService.createCampaign(body);
+  // }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(RoleType.RESTAURANT)
-  @Patch('campaign/update')
-  async updateCampaign(@Body() body: UpdateCampaignnDto): Promise<any> {
-    try {
-      return await this.paymentService.updateCampaign(body);
-    } catch (error) {
-      throw new Error('Update campaign failed!')
-    }
-  }
+  // @UseGuards(AuthGuard('jwt'), RolesGuard)
+  // @Roles(RoleType.RESTAURANT)
+  // @Patch('campaign/update')
+  // async updateCampaign(@Body() body: UpdateCampaignnDto): Promise<any> {
+  //   try {
+  //     return await this.paymentService.updateCampaign(body);
+  //   } catch (error) {
+  //     throw new Error('Update campaign failed!')
+  //   }
+  // }
 
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(RoleType.RESTAURANT)
-  @Delete('campaign/:id/delete')
-  async deleteCampaign(@Param('id') id: string, @Req() req: RequestWithUser): Promise<any> {
-    try {
-      return await this.paymentService.deleteCampaign(id, req.user.sub)
-    } catch (error) {
-      throw new Error('Delete campaign failed')
-    }
-  }
+  // @UseGuards(AuthGuard('jwt'), RolesGuard)
+  // @Roles(RoleType.RESTAURANT)
+  // @Delete('campaign/:id/delete')
+  // async deleteCampaign(@Param('id') id: string, @Req() req: RequestWithUser): Promise<any> {
+  //   try {
+  //     return await this.paymentService.deleteCampaign(id, req.user.sub)
+  //   } catch (error) {
+  //     throw new Error('Delete campaign failed')
+  //   }
+  // }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Patch('status')
-  updateActiveStatus(@Req() req: RequestWithUser, @Body() body: { status: RestaurantStatus }) {
+  updateActiveStatus(
+    @Req() req: RequestWithUser,
+    @Body() body: { status: RestaurantStatus },
+  ) {
     return this.restaurantService.updateActiveStatus(req.user.sub, body.status);
   }
-  
+
   // RESTAURANT
 
   // FOOD ITEM
@@ -360,10 +454,10 @@ export class RestaurantController implements IRestaurantController, ICampaign{
   // info(@Req() req: RequestWithUser) {
   //   return this.restaurantService.findOneId(req.user.role_id.restaurant);
   // }
-  
+
   // @Roles(RoleType.RESTAURANT)
   // @ApiQuery({
-  //   name: 'index', 
+  //   name: 'index',
   //   type: Number,
   //   example: 0,
   // })

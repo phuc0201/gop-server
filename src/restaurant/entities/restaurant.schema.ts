@@ -1,52 +1,80 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document, HydratedDocument, SchemaTypes } from "mongoose";
-import { CuisinesCategory, RestaurantStatus, RestaurantTier } from "src/utils/enums";
-import { RestaurantProfile, RestaurantProfileSchema } from "./restaurant_profile.schema";
-import { Rating, RatingSchema } from "src/utils/subschemas/rating.schema";
-import { LocationObject } from "src/utils/subschemas/location.schema";
-import { RestaurantCategory, RestaurantCategorySchema } from "./restaurant_category.schema";
-import { Account } from "src/auth/entities/account.schema";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, HydratedDocument, SchemaTypes } from 'mongoose';
+import {
+  CuisinesCategory,
+  RestaurantStatus,
+  RestaurantTier,
+} from 'src/utils/enums';
+import {
+  RestaurantProfile,
+  RestaurantProfileSchema,
+} from './restaurant_profile.schema';
+import { Rating, RatingSchema } from 'src/utils/subschemas/rating.schema';
+import { LocationObject } from 'src/utils/subschemas/location.schema';
+import {
+  RestaurantCategory,
+  RestaurantCategorySchema,
+} from './restaurant_category.schema';
+import { Account } from 'src/auth/entities/account.schema';
+import { CuisineCategories } from './cuisine_categories.schema';
 
 export type RestaurantDocument = HydratedDocument<Restaurant>;
 
 @Schema({
-    toJSON: {
-        getters: true,
-        virtuals: true,
-    },
-    timestamps: true,
+  toJSON: {
+    getters: true,
+    virtuals: true,
+  },
+  timestamps: true,
 })
-export class Restaurant extends Account{
-    @Prop({ type: [SchemaTypes.ObjectId], ref: 'CuisineCategories'})
-    cuisine_categories: string[]
+export class Restaurant extends Account {
+  @Prop({ type: [SchemaTypes.ObjectId], ref: 'CuisineCategories' })
+  cuisine_categories: CuisineCategories[] | string[];
 
-    @Prop({ type: [SchemaTypes.ObjectId], ref: 'RestaurantCategory'})
-    restaurant_categories: RestaurantCategory[] | string[]
-   
-    @Prop({ enum: RestaurantStatus, default: RestaurantStatus.CLOSED })
-    status: RestaurantStatus
+  @Prop({ type: [SchemaTypes.ObjectId], ref: 'RestaurantCategory' })
+  restaurant_categories: RestaurantCategory[] | string[];
 
-    @Prop({ required: true })
-    restaurant_name: string
+  @Prop({ enum: RestaurantStatus, default: RestaurantStatus.CLOSED })
+  status: RestaurantStatus;
 
-    @Prop({  })
-    location: LocationObject
+  @Prop({ required: true })
+  restaurant_name: string;
 
-    @Prop({ required: true })
-    bio: string
+  @Prop({})
+  location: LocationObject;
 
-    @Prop({  })
-    avatar: string
-    
-    @Prop({  })
-    cover_image: string
+  @Prop({ required: true })
+  bio: string;
 
-    @Prop({ enum: RestaurantTier, default: RestaurantTier.STANDARD})
-    tier: RestaurantTier    
+  @Prop({})
+  avatar: string;
 
-    @Prop({ type: RestaurantProfileSchema, default: new RestaurantProfile(), select: false})
-    profile: RestaurantProfile
+  @Prop({})
+  cover_image: string;
 
+  @Prop({ enum: RestaurantTier, default: RestaurantTier.STANDARD })
+  tier: RestaurantTier;
+
+  @Prop({
+    type: RestaurantProfileSchema,
+    default: new RestaurantProfile(),
+    select: false,
+  })
+  profile: RestaurantProfile;
 }
 
 export const RestaurantSchema = SchemaFactory.createForClass(Restaurant);
+
+RestaurantSchema.index(
+  {
+    restaurant_name: 'text',
+    bio: 'text',
+  },
+  {
+    weights: {
+      restaurant_name: 5,
+      bio: 1,
+    },
+    name: 'text_search_index',
+  },
+);

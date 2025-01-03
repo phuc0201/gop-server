@@ -1,10 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ObjectId } from 'mongodb';
 import { Model, Types } from 'mongoose';
 import { AccountServiceAbstract } from 'src/auth/account.abstract.service';
 import { OrderFoodItems } from 'src/order/entities/order_food_items.schema';
-import { AzureStorageService } from 'src/utils/auzre/storage-blob.service';
 import { RestaurantStatus, VehicleType } from 'src/utils/enums';
 import { FirebaseService } from 'src/utils/firebase/firebase.service';
 import { VietMapService } from 'src/utils/map-api/viet-map.service';
@@ -15,7 +18,10 @@ import { ReviewDto } from './dto/review.dto';
 import { UpdateFoodItemDto } from './dto/update-food-item.dto';
 import { UpdateRestaurantCategoryDto } from './dto/update-restaurant-category.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
-import { CuisineCategories } from './entities/cuisine_categories.schema';
+import {
+  CuisineCategories,
+  CuisineCategoriesSchema,
+} from './entities/cuisine_categories.schema';
 import { Restaurant, RestaurantDocument } from './entities/restaurant.schema';
 import { RestaurantCategory } from './entities/restaurant_category.schema';
 import { Review } from './entities/review.schema';
@@ -24,20 +30,23 @@ import { ModifierService } from './modifier.service';
 import { ModifierGroupService } from './modifier_groups.service';
 import { RestaurantCategoryService } from './restaurant_category.service';
 import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
-import { limits } from 'argon2';
+import { CampaignService } from 'src/campaign/campaign.service';
+
 @Injectable()
 export class RestaurantService extends AccountServiceAbstract<Restaurant> {
-
   constructor(
-    @InjectModel(Restaurant.name) private readonly restaurantModel: Model<Restaurant>,
+    @InjectModel(Restaurant.name)
+    private readonly restaurantModel: Model<Restaurant>,
     @InjectModel(Review.name) private readonly reviewModel: Model<Review>,
-    @InjectModel(CuisineCategories.name) private readonly cuisineModel: Model<CuisineCategories>,
+    @InjectModel(CuisineCategories.name)
+    private readonly cuisineModel: Model<CuisineCategories>,
     private readonly restaurantCategoryService: RestaurantCategoryService,
     private readonly foodItemService: FoodItemService,
     private readonly modifierGroupService: ModifierGroupService,
     private readonly modifierService: ModifierService,
     private vietmapService: VietMapService,
     private firebaseService: FirebaseService,
+    private campaignService: CampaignService,
   ) {
     super(restaurantModel);
   }
@@ -46,14 +55,17 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     let foods;
     if (category_id === '') {
       foods = await this.foodItemService.getFoodItems(page, limit);
-    }
-    else {
-      const foodItems = await this.restaurantCategoryService.getFoodItems(page, limit, category_id);
-      foods = foodItems[0]["food_items"];
+    } else {
+      const foodItems = await this.restaurantCategoryService.getFoodItems(
+        page,
+        limit,
+        category_id,
+      );
+      foods = foodItems[0]['food_items'];
     }
     return {
       totalPage: 0,
-      foodItems: foods
+      foodItems: foods,
     };
   }
 
@@ -62,7 +74,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const reviews = await this.reviewModel.aggregate([
       {
         $match: {
-          reviewable_id: objectId
+          reviewable_id: objectId,
         },
       },
       {
@@ -74,16 +86,16 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           pipeline: [
             {
               $project: {
-                "full_name": 1,
-                "avatar": 1
-              }
-            }
-          ]
-        }
+                full_name: 1,
+                avatar: 1,
+              },
+            },
+          ],
+        },
       },
       {
-        $unwind: '$customer'
-      }
+        $unwind: '$customer',
+      },
     ]);
     return reviews;
   }
@@ -102,15 +114,22 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           food_id: item.food_id,
           quantity: item.food_id,
           image: food.image,
-          name: food.name
+          name: food.name,
         };
-      }));
+      }),
+    );
 
     return newOrderFoodItems;
   }
 
-  async updateRestaurant(id: string, dto: UpdateRestaurantDto): Promise<Restaurant> {
-    const restaurant = await this.update(id, dto as Partial<UpdateRestaurantDto>);
+  async updateRestaurant(
+    id: string,
+    dto: UpdateRestaurantDto,
+  ): Promise<Restaurant> {
+    const restaurant = await this.update(
+      id,
+      dto as Partial<UpdateRestaurantDto>,
+    );
     return restaurant;
   }
 
@@ -118,12 +137,13 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     await this.update(id, { status });
 
     return {
-      msg: 'update successfully'
+      msg: 'update successfully',
     };
   }
 
   async findCategoryByRestaurant(id: string) {
-    const restaurant = await this.restaurantModel.findById(id)
+    const restaurant = await this.restaurantModel
+      .findById(id)
       .populate({
         path: 'restaurant_categories',
         model: 'RestaurantCategory',
@@ -137,11 +157,11 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const categories = await this.restaurantModel.aggregate([
       {
         $match: {
-          _id: objectId
-        }
+          _id: objectId,
+        },
       },
       {
-        $unwind: '$restaurant_categories'
+        $unwind: '$restaurant_categories',
       },
       {
         $lookup: {
@@ -152,39 +172,45 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           pipeline: [
             {
               $project: {
-                "image": 1,
-                "name": 1
-              }
-            }
-          ]
-        }
+                image: 1,
+                name: 1,
+              },
+            },
+          ],
+        },
       },
       {
-        $unwind: '$restaurantCategories'
+        $unwind: '$restaurantCategories',
       },
       {
         $group: {
           _id: '$_id',
           restaurant_categories: {
-            $push: '$restaurantCategories'
-          }
-        }
-      }
+            $push: '$restaurantCategories',
+          },
+        },
+      },
     ]);
     return categories[0].restaurant_categories;
   }
 
-  async addCategory(restaurant_id: string, dto: CreateRestaurantCategoryDto): Promise<RestaurantCategory> {
+  async addCategory(
+    restaurant_id: string,
+    dto: CreateRestaurantCategoryDto,
+  ): Promise<RestaurantCategory> {
     const category = await this.restaurantCategoryService.createCategory(dto);
 
-    await this.restaurantModel.findByIdAndUpdate(restaurant_id,
-      {
-        $push: {
-          restaurant_categories: category._id
-        }
-      },
-      { new: true }
-    ).exec();
+    await this.restaurantModel
+      .findByIdAndUpdate(
+        restaurant_id,
+        {
+          $push: {
+            restaurant_categories: category._id,
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
     return category;
   }
@@ -199,12 +225,22 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     return fare;
   }
 
-  async updateCategory(restaurant_id: string, cate_id: string, dto: UpdateRestaurantCategoryDto): Promise<any> {
-    const restaurant = await this.findOneByCondition({ _id: restaurant_id, restaurant_categories: cate_id });
+  async updateCategory(
+    restaurant_id: string,
+    cate_id: string,
+    dto: UpdateRestaurantCategoryDto,
+  ): Promise<any> {
+    const restaurant = await this.findOneByCondition({
+      _id: restaurant_id,
+      restaurant_categories: cate_id,
+    });
     if (!restaurant) {
       throw new NotFoundException('Restaurant or Category not found');
     }
-    const category = await this.restaurantCategoryService.updateCategory(cate_id, dto);
+    const category = await this.restaurantCategoryService.updateCategory(
+      cate_id,
+      dto,
+    );
     if (!category) {
       throw new NotFoundException('Category not found');
     }
@@ -212,15 +248,20 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   }
 
   async deleteCategory(category_id: string, restaurant_id: string) {
-    const restaurant = await this.findOneByCondition({ _id: restaurant_id, restaurant_categories: category_id });
+    const restaurant = await this.findOneByCondition({
+      _id: restaurant_id,
+      restaurant_categories: category_id,
+    });
     if (!restaurant) {
       throw new NotFoundException('Restaurant or Category not found');
     }
 
-    const new_cate = restaurant.restaurant_categories.filter(cate_id => cate_id != category_id) as RestaurantCategory[];
+    const new_cate = restaurant.restaurant_categories.filter(
+      (cate_id) => cate_id != category_id,
+    ) as RestaurantCategory[];
 
     await this.update(restaurant_id, {
-      restaurant_categories: new_cate
+      restaurant_categories: new_cate,
     });
 
     return await this.restaurantCategoryService.deleteCategory(category_id);
@@ -235,10 +276,12 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const restaurant = await this.findOneById(restaurant_id);
     if (restaurant) {
       const foodItem = await this.foodItemService.createFoodItem(dto);
-      await this.restaurantCategoryService.addFoodItem(foodItem._id, dto.category_id);
+      await this.restaurantCategoryService.addFoodItem(
+        foodItem._id,
+        dto.category_id,
+      );
       return foodItem;
-    }
-    else throw new NotFoundException("Restaurant not found");
+    } else throw new NotFoundException('Restaurant not found');
   }
 
   async getRestaurantLocation(restaurant_id: string) {
@@ -250,7 +293,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const url = await this.firebaseService.uploadFile(foodItem_id, img);
     await this.foodItemService.updateFoodItemImg(foodItem_id, url);
     return {
-      imgUrl: url
+      imgUrl: url,
     };
   }
 
@@ -258,157 +301,159 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const url = await this.firebaseService.uploadFile(cate_id, img);
     await this.restaurantCategoryService.updateImage(cate_id, url);
     return {
-      imgUrl: url
+      imgUrl: url,
     };
   }
 
   async updateFoodItem(foodItem: UpdateFoodItemDto) {
     const updateFoodItemPromise = this.foodItemService.updateFoodItem(foodItem);
-    const changeFoodItemCategoryPromise = this.restaurantCategoryService.updateFoodItemCategory(foodItem._id, foodItem.category_id);
+    const changeFoodItemCategoryPromise =
+      this.restaurantCategoryService.updateFoodItemCategory(
+        foodItem._id,
+        foodItem.category_id,
+      );
 
-    const [newFoodItem] = await Promise.all([updateFoodItemPromise, changeFoodItemCategoryPromise]);
+    const [newFoodItem] = await Promise.all([
+      updateFoodItemPromise,
+      changeFoodItemCategoryPromise,
+    ]);
 
     return newFoodItem;
   }
 
   async deleteFoodItem(restaurant_id: string, category_id, food_id: string) {
-    const restaurant = await this.findOneByCondition({ _id: restaurant_id, restaurant_categories: category_id });
+    const restaurant = await this.findOneByCondition({
+      _id: restaurant_id,
+      restaurant_categories: category_id,
+    });
     if (!restaurant) {
       throw new NotFoundException('Restaurant or Category not found');
     }
 
-    const newFoodItem = await this.restaurantCategoryService.deleteFoodItem(category_id, food_id);
+    const newFoodItem = await this.restaurantCategoryService.deleteFoodItem(
+      category_id,
+      food_id,
+    );
 
     return newFoodItem;
   }
 
-  async getRestaurantsByCustomer(dto: GetRestaurantsQueryDto) {
-    let matchConditions: any = {};
+  private normalizeString(str: string): string {
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
 
-    if (dto.categoryId) {
-      if (!Types.ObjectId.isValid(dto.categoryId)) {
-        throw new BadRequestException('Invalid category ID');
-      }
-      matchConditions.cuisine_categories = new Types.ObjectId(dto.categoryId);
-    }
-  
-    if (dto.searchQuery) {
-      const searchRegex = new RegExp(dto.searchQuery, 'i'); 
-      matchConditions.$or = [
-        { restaurant_name: { $regex: searchRegex } },
-        { bio: { $regex: searchRegex } },
-      ];
-    }
-    const restaurants = await this.restaurantModel.aggregate([
-      { $match: matchConditions },
-      {
-        $lookup: {
-          from: 'reviews',
-          localField: '_id',
-          foreignField: 'reviewable_id',
-          as: 'ratings',
-        },
-      },
-      {
-        $unwind: {
-          path: '$ratings',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+  private async calculateRestaurantAverageRating(restaurantIds: string[]) {
+    const resIds = restaurantIds.map((id) => new Types.ObjectId(id));
+
+    return await this.reviewModel.aggregate([
+      { $match: { reviewable_id: { $in: resIds } } },
       {
         $group: {
-          _id: '$_id',
-          restaurant_name: { $first: '$restaurant_name' },
-          bio: { $first: '$bio' },
-          cuisine_categories: { $first: "$cuisine_categories" },
-          avatar: { $first: '$avatar' },
-          location: { $first: '$location' },
-          rating: { $avg: '$ratings.rating' },
-          ratingCount: { $sum: { $cond: ['$ratings.rating', 1, 0] } },
-        },
-      },
-      {
-        $lookup: {
-          from: 'campaigns',
-          localField: '_id',
-          foreignField: 'restaurant_id',
-          as: 'campaigns',
-          pipeline: [{ $match: { deleted_at: null } }]
-        },
-      },
-      {
-        $unwind: {
-          path: '$campaigns',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $group: {
-          _id: '$_id',
-          restaurant_name: { $first: '$restaurant_name' },
-          bio: { $first: '$bio' },
-          cuisine_categories: { $first: '$cuisine_categories' },
-          avatar: { $first: '$avatar' },
-          location: { $first: '$location' },
-          rating: { $first: '$rating' },
-          ratingCount: { $first: '$ratingCount' },
-          campaigns: { $push: '$campaigns' },
-        },
-      },
-      {
-        $lookup: {
-          from: 'cuisinecategories',
-          localField: 'cuisine_categories',
-          foreignField: '_id',
-          as: 'cuisine_categories_details',
-        },
-      },
-      {
-        $addFields: {
-          cuisine_categories: '$cuisine_categories_details.name',
-        },
-      },
-      {
-        $sort: {
-          rating: -1, 
-          ratingCount: -1, 
+          _id: '$reviewable_id',
+          averageRating: { $avg: '$rating' },
         },
       },
       {
         $project: {
-          _id: 1,
-          restaurant_name: 1,
-          bio: 1,
-          cuisine_categories: 1,
-          avatar: 1,
-          location: 1,
-          campaign_count: { $size: { $ifNull: ['$campaigns', []] } },
-          rating: { $ifNull: ['$rating', 0] },
+          restaurantId: '$_id',
+          averageRating: { $round: ['$averageRating', 2] },
+          _id: 0,
         },
       },
-      { $skip: (dto.page - 1) * dto.limit },
-    { $limit: dto.limit },
     ]);
+  }
+
+  async getRestaurantsByCustomer(
+    coordinates: number[],
+    page: number = 1,
+    limit: number = 10,
+    searchQuery: string = '',
+    cuisineId: string = '',
+  ) {
+    let matchConditions: any = {};
+
+    if (cuisineId) {
+      if (!Types.ObjectId.isValid(cuisineId)) {
+        throw new BadRequestException('Invalid category ID');
+      }
+      matchConditions.cuisine_categories = new Types.ObjectId(cuisineId);
+    }
+
+    if (searchQuery) {
+      matchConditions.$text = {
+        $search: this.normalizeString(searchQuery),
+      };
+    }
+
+    const restaurants = await this.restaurantModel
+      .find(matchConditions)
+      .select('restaurant_name avatar cuisine_categories location')
+      .populate('cuisine_categories', 'name')
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .exec();
+
+    if (restaurants.length == 0)
+      return {
+        totalPage: 0,
+        data: [],
+      };
+
+    const restaurantIds = restaurants.map((res) => res.id);
+    const locations = restaurants.map((res) => res.location);
+    const customerLocation = new LocationObject(coordinates, '');
+
+    const [totalRestaurants, distancesAndDurations, campaigns, avgRatings] =
+      await Promise.all([
+        this.restaurantModel.countDocuments(matchConditions),
+        this.vietmapService.getMultipleDistanceNDuration(
+          customerLocation,
+          locations,
+          VehicleType.BIKE,
+        ),
+        this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
+        this.calculateRestaurantAverageRating(restaurantIds),
+      ]);
+
+    const totalPages = Math.ceil(totalRestaurants / limit);
+
+    const restaurantWithCampaigns = new Set(
+      campaigns.map((cmp) => cmp.restaurant_id.toString()),
+    );
 
     const recommendedRes = await Promise.all(
-      (restaurants as Restaurant[]).map(async (res) => {
-        const customerLocation = new LocationObject(dto.coordinates, '');
-        const { distance, duration } = await this.vietmapService.getDistanceNDuration(res.location, customerLocation, VehicleType.BIKE);
-        const { location, ...newRes } = { ...res };
-        return { ...newRes, distance, duration };
-      })
+      restaurants.map(async (res, index) => {
+        const { location, cuisine_categories, ...newRes } = { ...res.toJSON() };
+        const hasCmp = restaurantWithCampaigns.has(res.id.toString());
+        const review = avgRatings.find((rev) => rev.restaurantId == res.id);
+        return {
+          ...newRes,
+          cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
+          distance: distancesAndDurations.distances[index],
+          duration: distancesAndDurations.durations[index],
+          hasCampaign: hasCmp,
+          rating: review ? review.averageRating : 0,
+        };
+      }),
     );
 
     return {
-      totalPage: Math.ceil(restaurants.length / dto.limit),
-      data: recommendedRes
+      totalPage: totalPages,
+      data: recommendedRes,
     };
   }
 
   async getMenu(id: string) {
     const restaurant = await this.findOneById(id);
     const menu = await Promise.all(
-      restaurant.restaurant_categories.map(async (cate_id) => await this.restaurantCategoryService.getMenuDetails(cate_id))
+      restaurant.restaurant_categories.map(
+        async (cate_id) =>
+          await this.restaurantCategoryService.getMenuDetails(cate_id),
+      ),
     );
     return menu;
   }
@@ -419,8 +464,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const restaurant = await this.restaurantModel.aggregate([
       {
         $match: {
-          _id: objectId
-        }
+          _id: objectId,
+        },
       },
       {
         $lookup: {
@@ -447,12 +492,16 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           avatar: 1,
           cover_image: 1,
           cuisine_categories: 1,
-        }
-      }
-    ])
+        },
+      },
+    ]);
 
     const [{ distance, duration }, ratingResult] = await Promise.all([
-      this.vietmapService.getDistanceNDuration(restaurant[0].location, customerLocation, VehicleType.BIKE),
+      this.vietmapService.getDistanceNDuration(
+        restaurant[0].location,
+        customerLocation,
+        VehicleType.BIKE,
+      ),
       this.reviewModel.aggregate([
         { $match: { reviewable_id: new Types.ObjectId(id) } },
         {
@@ -460,11 +509,14 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             _id: null,
             averageRating: { $avg: '$rating' },
           },
-        }
+        },
       ]),
     ]);
 
-    const rating = ratingResult.length > 0 ? parseFloat(ratingResult[0].averageRating.toFixed(1)) : 0;
+    const rating =
+      ratingResult.length > 0
+        ? parseFloat(ratingResult[0].averageRating.toFixed(1))
+        : 0;
 
     return {
       ...restaurant[0],
@@ -474,8 +526,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     };
   }
 
-
-  async createCuisineCategory(dto: { name: string, slug: string; }) {
+  async createCuisineCategory(dto: { name: string; slug: string }) {
     const cuisine = new this.cuisineModel(dto);
     return await cuisine.save();
   }
@@ -514,7 +565,9 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
   async getInfo(id: string) {
     const restaurant = await this.findOneById(id);
-    const { verified, email, full_name, ...restaurant_info } = (restaurant as RestaurantDocument).toJSON();
+    const { verified, email, full_name, ...restaurant_info } = (
+      restaurant as RestaurantDocument
+    ).toJSON();
     return restaurant_info;
   }
   // // async addCategory(id: string, dto: CreateRestaurantCategoryDto): Promise<RestaurantDocument> {
@@ -539,7 +592,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   //   const restaurant = await this.restaurantModel.findByIdAndUpdate(id, {tier:tier}).exec();
   //   return restaurant;
   // }
-
 
   // async remove(id: string) {
   //   return this.restaurantModel.findByIdAndDelete(id).exec();
@@ -647,7 +699,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   //     }
   //     await restaurantCategory.save();
   //     return newFoodItem.save();
-  //   }  
+  //   }
   //   else{
   //     throw new Error('Create food item failed')
   //   }

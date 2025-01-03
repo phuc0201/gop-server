@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { PaymentService } from 'src/payment/payment.service';
 import { IAdminController, ICampaign } from 'src/utils/interfaces';
@@ -7,17 +16,17 @@ import { RoleType } from 'src/utils/enums';
 import { CustomerService } from 'src/customer/customer.service';
 import { OrderService } from 'src/order/order.service';
 import { RestaurantService } from 'src/restaurant/restaurant.service';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Admin')
 @Controller('api/v1/admin')
-export class AdminController implements IAdminController, ICampaign{
+export class AdminController implements IAdminController, ICampaign {
   constructor(
     private readonly adminService: AdminService,
     private readonly authService: AuthService,
     private readonly paymentService: PaymentService,
     private readonly customerService: CustomerService,
     private readonly orderService: OrderService,
-    private readonly restaurantService: RestaurantService
-    
+    private readonly restaurantService: RestaurantService,
   ) {}
   getRevenueStatistics(): Promise<any> {
     throw new Error('Method not implemented.');
@@ -25,7 +34,7 @@ export class AdminController implements IAdminController, ICampaign{
 
   @Get('customer/:id/order-history')
   async OrderHistoryByCustomerId(@Param('id') id: string) {
-    return await this.orderService.findCusOrderHistoryByAdmin(id)
+    return await this.orderService.findCusOrderHistoryByAdmin(id);
   }
 
   @Get('customer/:id/details')
@@ -39,10 +48,8 @@ export class AdminController implements IAdminController, ICampaign{
   }
 
   @Patch('change-account-status')
-  changeAccountVerifyStatus(@Body() body: {
-    verified: boolean, _id: string
-  }) {
-    return this.adminService.changeAccVerifyStatus(body.verified, body._id)
+  changeAccountVerifyStatus(@Body() body: { verified: boolean; _id: string }) {
+    return this.adminService.changeAccVerifyStatus(body.verified, body._id);
   }
 
   @Get('campaigns')
@@ -154,6 +161,4 @@ export class AdminController implements IAdminController, ICampaign{
   searchOrders(): Promise<any> {
     throw new Error('Method not implemented.');
   }
-
-
 }
