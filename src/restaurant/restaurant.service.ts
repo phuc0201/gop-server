@@ -8,7 +8,12 @@ import { ObjectId } from 'mongodb';
 import { Model, Types } from 'mongoose';
 import { AccountServiceAbstract } from 'src/auth/account.abstract.service';
 import { OrderFoodItems } from 'src/order/entities/order_food_items.schema';
-import { RestaurantStatus, VehicleType } from 'src/utils/enums';
+import {
+  BikeFare,
+  RestaurantStatus,
+  SortStatus,
+  VehicleType,
+} from 'src/utils/enums';
 import { FirebaseService } from 'src/utils/firebase/firebase.service';
 import { VietMapService } from 'src/utils/map-api/viet-map.service';
 import { LocationObject } from 'src/utils/subschemas/location.schema';
@@ -31,6 +36,7 @@ import { ModifierGroupService } from './modifier_groups.service';
 import { RestaurantCategoryService } from './restaurant_category.service';
 import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
 import { CampaignService } from 'src/campaign/campaign.service';
+import { OrderService } from 'src/order/order.service';
 
 @Injectable()
 export class RestaurantService extends AccountServiceAbstract<Restaurant> {
@@ -373,6 +379,11 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     limit: number = 10,
     searchQuery: string = '',
     cuisineId: string = '',
+    sortby: string = 'recommended',
+    promo: boolean = false,
+    bestOverall: boolean = false,
+    under: number = -1,
+    deliveryFee: number = -1,
   ) {
     let matchConditions: any = {};
 
@@ -393,8 +404,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       .find(matchConditions)
       .select('restaurant_name avatar cuisine_categories location')
       .populate('cuisine_categories', 'name')
-      .skip((page - 1) * limit)
-      .limit(limit)
       .exec();
 
     if (restaurants.length == 0)
@@ -407,25 +416,21 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const locations = restaurants.map((res) => res.location);
     const customerLocation = new LocationObject(coordinates, '');
 
-    const [totalRestaurants, distancesAndDurations, campaigns, avgRatings] =
-      await Promise.all([
-        this.restaurantModel.countDocuments(matchConditions),
-        this.vietmapService.getMultipleDistanceNDuration(
-          customerLocation,
-          locations,
-          VehicleType.BIKE,
-        ),
-        this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
-        this.calculateRestaurantAverageRating(restaurantIds),
-      ]);
-
-    const totalPages = Math.ceil(totalRestaurants / limit);
+    const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
+      this.vietmapService.getMultipleDistanceNDuration(
+        customerLocation,
+        locations,
+        VehicleType.BIKE,
+      ),
+      this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
+      this.calculateRestaurantAverageRating(restaurantIds),
+    ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) => cmp.restaurant_id.toString()),
     );
 
-    const recommendedRes = await Promise.all(
+    let combinedRestaurants = await Promise.all(
       restaurants.map(async (res, index) => {
         const { location, cuisine_categories, ...newRes } = { ...res.toJSON() };
         const hasCmp = restaurantWithCampaigns.has(res.id.toString());
@@ -441,9 +446,50 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       }),
     );
 
+    if (promo) {
+      combinedRestaurants = combinedRestaurants.filter((r) => r.hasCampaign);
+    }
+
+    if (bestOverall) {
+      combinedRestaurants = combinedRestaurants.filter((r) => r.rating >= 4);
+    }
+
+    if (under > -1) {
+      combinedRestaurants = combinedRestaurants.filter(
+        (r) => r.duration <= under,
+      );
+    }
+
+    if (deliveryFee > -1) {
+      combinedRestaurants = combinedRestaurants.filter(
+        (r, index) =>
+          this.vietmapService.calculateFare(
+            distancesAndDurations.distances[index],
+            BikeFare,
+          ) <= deliveryFee,
+      );
+    }
+
+    switch (sortby) {
+      case SortStatus.RECOMMENDED:
+        combinedRestaurants.sort((a, b) => a.distance - b.distance);
+        break;
+      case SortStatus.RATING:
+        combinedRestaurants.sort((a, b) => b.rating - a.rating);
+        break;
+      default:
+        break;
+    }
+
+    const totalPages = Math.ceil(combinedRestaurants.length / limit);
+
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const dataPage = combinedRestaurants.slice(startIndex, endIndex);
+
     return {
       totalPage: totalPages,
-      data: recommendedRes,
+      data: dataPage,
     };
   }
 
@@ -460,66 +506,49 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
   async getInfoByCustomer(id: string, coordinates: number[]) {
     const customerLocation = new LocationObject(coordinates, '');
-    const objectId = new ObjectId(id);
-    const restaurant = await this.restaurantModel.aggregate([
-      {
-        $match: {
-          _id: objectId,
-        },
-      },
-      {
-        $lookup: {
-          from: 'cuisinecategories',
-          localField: 'cuisine_categories',
-          foreignField: '_id',
-          as: 'cuisine_categories_details',
-        },
-      },
-      {
-        $addFields: {
-          cuisine_categories: '$cuisine_categories_details.name',
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          restaurant_categories: 1,
-          status: 1,
-          restaurant_name: 1,
-          bio: 1,
-          tier: 1,
-          location: 1,
-          avatar: 1,
-          cover_image: 1,
-          cuisine_categories: 1,
-        },
-      },
+
+    const [restaurant, ratingResult] = await Promise.all([
+      this.restaurantModel
+        .findById(id)
+        .select(
+          'restaurant_name bio cuisine_categories location cover_image status',
+        )
+        .populate('cuisine_categories', 'name')
+        .lean(),
+      this.reviewModel
+        .aggregate([
+          { $match: { reviewable_id: new Types.ObjectId(id) } },
+          {
+            $group: {
+              _id: null,
+              averageRating: { $avg: '$rating' },
+            },
+          },
+        ])
+        .exec(),
     ]);
 
-    const [{ distance, duration }, ratingResult] = await Promise.all([
-      this.vietmapService.getDistanceNDuration(
-        restaurant[0].location,
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
+    const { distance, duration } =
+      await this.vietmapService.getDistanceNDuration(
+        restaurant.location,
         customerLocation,
         VehicleType.BIKE,
-      ),
-      this.reviewModel.aggregate([
-        { $match: { reviewable_id: new Types.ObjectId(id) } },
-        {
-          $group: {
-            _id: null,
-            averageRating: { $avg: '$rating' },
-          },
-        },
-      ]),
-    ]);
+      );
 
     const rating =
       ratingResult.length > 0
-        ? parseFloat(ratingResult[0].averageRating.toFixed(1))
+        ? Number(ratingResult[0].averageRating.toFixed(1))
         : 0;
 
+    const { cuisine_categories, ...restaurantInfo } = restaurant;
+
     return {
-      ...restaurant[0],
+      ...restaurantInfo,
+      cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
       distance,
       duration,
       rating,

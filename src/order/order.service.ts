@@ -724,7 +724,7 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
   //     }
   //   }
 
-  private calculateFare(distance: number, type: DistanceFare): number {
+  calculateFare(distance: number, type: DistanceFare): number {
     distance = Math.round(distance / 1000);
     if (distance <= 2) {
       return distance * type.First2Km;

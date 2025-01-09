@@ -21,4 +21,10 @@ export class GetRestaurantsQueryDto {
 
   @IsOptional()
   limit?: string;
+
+  sortby?: string;
+  promo?: string;
+  under?: string;
+  bestOverall?: string;
+  deliveryFee?: string;
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LocationObject } from '../subschemas/location.schema';
-import { VehicleType } from '../enums';
+import { DistanceFare, VehicleType } from '../enums';
 import { HttpService } from '@nestjs/axios';
 import { catchError, firstValueFrom, map } from 'rxjs';
 
@@ -40,12 +40,12 @@ export class VietMapService {
       ...dropoffs.map((dropoff) => dropoff.coordinates.reverse().join(',')),
     ];
 
-    const destinations = dropoffs.map((_, index) => index + 1).join(';');
+    const sources = dropoffs.map((_, index) => index + 1).join(';');
 
     const url = this.buildMatrixUrl({
       points,
-      sources: '0',
-      destinations,
+      sources,
+      destinations: '0',
       vehicle,
       apiVersion: '1.1',
     });
@@ -54,8 +54,8 @@ export class VietMapService {
       (res) => res.data,
     );
     return {
-      distances: res.distances[0],
-      durations: res.durations[0],
+      distances: res.distances.flatMap((distance) => distance),
+      durations: res.durations.flatMap((duration) => duration),
     };
   }
 
@@ -82,8 +82,19 @@ export class VietMapService {
       .toString()
       .replace(/%2C/g, ',')
       .replace(/%3D/g, '=')
+      .replace(/%3B/g, ';')
       .replace(/%26/g, '&');
-
     return `/matrix?${paramsString}`;
+  }
+
+  calculateFare(distance: number, type: DistanceFare): number {
+    distance = Math.round(distance / 1000);
+    if (distance <= 2) {
+      return distance * type.First2Km;
+    } else if (distance <= 10) {
+      return 12000 + (distance - 2) * type.Next8Km;
+    } else {
+      return 52000 + (distance - 10) * type.Over10Km;
+    }
   }
 }

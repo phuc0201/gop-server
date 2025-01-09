@@ -26,7 +26,6 @@ import {
   CuisineCategories,
   CuisineCategoriesSchema,
 } from './entities/cuisine_categories.schema';
-import { CampaignService } from 'src/campaign/campaign.service';
 import { CampaignModule } from 'src/campaign/campaign.module';
 
 @Module({
