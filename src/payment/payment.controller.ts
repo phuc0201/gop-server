@@ -1,27 +1,66 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req, Ip } from '@nestjs/common';
+import { Controller, Post, Body, Req, Ip, Get, Query } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { ApiTags } from '@nestjs/swagger';
 import { RequestWithUser } from 'src/utils/interfaces';
+import { error } from 'console';
 
-@ApiTags('Bill')
-@Controller('api/v1/bill')
-export class PaymentController{
-  constructor(
-    private readonly paymentService: PaymentService,
-  ) {}
+@ApiTags('Payment')
+@Controller('payment')
+export class PaymentController {
+  constructor(private readonly paymentService: PaymentService) {}
 
-  @Post('vnpay')
-  async getVnpayLink(@Req() req: RequestWithUser, @Ip() ip: string, @Body() body: { amount: number, returnUrl: string }){
+  @Post('vnpay/create')
+  async getVnpayLink(
+    @Req() req: RequestWithUser,
+    @Ip() ip: string,
+    @Body() body: { amount: number; orderId: string; returnUrl: string },
+  ) {
     try {
-      return this.paymentService.createURLVnPay(ip, body.amount, new Date().getTime().toString(), body.returnUrl);
+      return this.paymentService.createURLVnPay(
+        ip,
+        body.amount,
+        body.orderId,
+        body.returnUrl,
+      );
     } catch (e) {
       return e;
     }
   }
-  @Post('vnpay/refund')
-  async getRefundUrl(@Req() req: RequestWithUser, @Ip() ip: string, @Body() body: { amount: number, orderId: string, transDate: string }){
+
+  @Get('vnpay/return')
+  vnPayReturn(@Query() vnpParams: any) {
+    const isValidSignature = this.paymentService.verifyReturnUrl(vnpParams);
+
+    if (!isValidSignature) {
+      return { error: true, message: 'Invalid signature' };
+    }
+
+    const isSuccess = vnpParams['vnp_ResponseCode'] === '00';
+
+    if (isSuccess) {
+      this.paymentService.updateBillPaid(vnpParams['vnp_TxnRef']);
+    }
+
+    return {
+      error: isSuccess ? false : true,
+      orderId: vnpParams['vnp_TxnRef'],
+      amount: vnpParams['vnp_Amount'] / 100,
+      message: isSuccess ? 'Payment successful' : 'Payment failed',
+    };
+  }
+
+  @Post('refund')
+  async getRefundUrl(
+    @Req() req: RequestWithUser,
+    @Ip() ip: string,
+    @Body() body: { amount: number; orderId: string; transDate: string },
+  ) {
     try {
-      return this.paymentService.createRefundUrlVNPay(body.orderId, body.amount, body.transDate)
+      return this.paymentService.createRefundUrlVNPay(
+        body.orderId,
+        body.amount,
+        body.transDate,
+      );
     } catch (e) {
       return e;
     }

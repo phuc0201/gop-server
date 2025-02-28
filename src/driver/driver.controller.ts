@@ -1,13 +1,37 @@
-import { Controller, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, Res, Get, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query,
+  Res,
+  Get,
+  BadRequestException,
+} from '@nestjs/common';
 import { DriverService } from './driver.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
-import { ApiBearerAuth, ApiBody, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/utils/guards/roles.guard';
 import { IDriverController, RequestWithUser } from 'src/utils/interfaces';
 import { UpdateStatusDriverDto } from './dto/update-status-driver.dto';
-import { DriverStatus, OrderStatus, PaymentMethod, VehicleType } from 'src/utils/enums';
+import {
+  DriverStatus,
+  OrderStatus,
+  PaymentMethod,
+  VehicleType,
+} from 'src/utils/enums';
 import { OrderService } from 'src/order/order.service';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PaymentService } from 'src/payment/payment.service';
@@ -16,18 +40,15 @@ import { Response } from 'express';
 import { AssignDriverDto } from './dto/assign-driver.dto';
 
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'),RolesGuard)
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiTags('Driver')
-@Controller('api/v1/driver')
-export class DriverController implements IDriverController{
-  constructor(
-    private readonly driverService: DriverService,
-
-  ) {}
+@Controller('driver')
+export class DriverController implements IDriverController {
+  constructor(private readonly driverService: DriverService) {}
 
   @Get('profile')
   async getProfile(@Req() req: RequestWithUser, @Res() res: Response) {
-    await this.driverService.findOneById(req.user.sub).then(profile => {
+    await this.driverService.findOneById(req.user.sub).then((profile) => {
       if (profile) {
         return res.status(200).json({
           _id: profile._id,
@@ -39,7 +60,7 @@ export class DriverController implements IDriverController{
           vehicle_type: profile.vehicle_type,
           vehicle_plate: profile.vehicle_plate_number,
           status: profile.status,
-        })
+        });
       }
     });
   }
@@ -54,12 +75,19 @@ export class DriverController implements IDriverController{
     enum: ['online', 'offline'],
   })
   @Get('active/:status')
-  async updateActiveStatus(@Req() req: RequestWithUser, @Param('status') dto: string): Promise<any> {
+  async updateActiveStatus(
+    @Req() req: RequestWithUser,
+    @Param('status') dto: string,
+  ): Promise<any> {
     switch (dto) {
       case 'online':
-        return await this.driverService.update(req.user.sub, {status: DriverStatus.ONLINE});
+        return await this.driverService.update(req.user.sub, {
+          status: DriverStatus.ONLINE,
+        });
       case 'offline':
-        return await this.driverService.update(req.user.sub, {status: DriverStatus.OFFLINE});
+        return await this.driverService.update(req.user.sub, {
+          status: DriverStatus.OFFLINE,
+        });
       default:
         return new BadRequestException('Invalid status');
     }
@@ -149,9 +177,8 @@ export class DriverController implements IDriverController{
   //   }
   // }
 
-  
   // //* DELIVERY ORDER
-  
+
   // //* accept delivery order
   // @Get('delivery/order/:id/accept')
   // async acceptDeliveryOrder(@Param('id') id: string, @Req() req: RequestWithUser){
@@ -163,7 +190,7 @@ export class DriverController implements IDriverController{
   //     return e;
   //   }
   // }
-  
+
   // //* reject delivery order
   // @Get('delivery/order/:id/reject')
   // async rejectDeliveryOrder(@Param('id') id: string, @Req() req: RequestWithUser){
@@ -175,7 +202,7 @@ export class DriverController implements IDriverController{
   //     return e;
   //   }
   // }
-  
+
   // @Get('delivery/order/:id/arrived-restaurant')
   // async arrivedRestaurant(@Param('id') id: string, @Req() req: RequestWithUser){
   //   try {
@@ -202,4 +229,3 @@ export class DriverController implements IDriverController{
   //   }
   // }
 }
-

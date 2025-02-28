@@ -4,26 +4,40 @@ import * as qs from 'qs';
 import { format } from 'date-fns';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { BillStatus, PaymentMethod } from 'src/utils/enums';
+import { BillStatus, OrderType, PaymentMethod } from 'src/utils/enums';
 import { Bill, BillDocument } from './entities/bill.schema';
 import { Ledger, LedgerDocument } from './entities/ledger.schema';
 import { DeliveryOrder } from 'src/order/entities/delivery_order.schema';
 import { TransportOrder } from 'src/order/entities/transport_order.schema';
 import { Order, OrderDetailsType } from 'src/order/entities/order.schema';
+import { CreateBillDto } from './dto/create-bill.dto';
+import { ApplyCampaignDto } from './dto/apply-campaign.dto';
+import { CampaignService } from 'src/campaign/campaign.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PaymentService {
+  private readonly vnpUrl: string;
+  private readonly tmnCode: string;
+  private readonly hashSecret: string;
+
   constructor(
     @InjectModel(Bill.name) private readonly billModel: Model<Bill>,
     @InjectModel(Ledger.name) private readonly ledgerModel: Model<Ledger>,
-  ) {}
+    private readonly campaignService: CampaignService,
+    private configService: ConfigService,
+  ) {
+    this.vnpUrl = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+    this.tmnCode = this.configService.get<string>('VNPAY_TMN_CODE');
+    this.hashSecret = this.configService.get<string>('VNPAY_HASH_SECRET');
+  }
 
   createURLVnPay(ip: string, amount: number, orderId: string, url: string) {
     const date = new Date();
-    let tmnCode = '0NDLY2ZY';
-    let secretKey = 'DGCULOB4IRXO70APD55EP36RID3LL2LJ';
-    let vnpUrl = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-    let returnUrl = url; //'https://gop-payment.vercel.app/user/payment'
+    let tmnCode = this.tmnCode;
+    let secretKey = this.hashSecret;
+    let vnpUrl = this.vnpUrl;
+    let returnUrl = url;
     let locale = 'vn';
     let currCode = 'VND';
     let vnp_Params = {};
@@ -76,6 +90,19 @@ export class PaymentService {
     return `${vnp_ApiUrl}?${querystring}`;
   }
 
+  verifyReturnUrl(vnpParams: any): boolean {
+    const secureHash = vnpParams['vnp_SecureHash'];
+    delete vnpParams['vnp_SecureHash'];
+    delete vnpParams['vnp_SecureHashType'];
+
+    const sortedParams = this.sortObject(vnpParams);
+    const signData = qs.stringify(sortedParams, { encode: false });
+    const hmac = crypto.createHmac('sha512', this.hashSecret);
+    const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+
+    return secureHash === signed;
+  }
+
   sortObject(obj) {
     let sorted = {};
     let str = [];
@@ -92,179 +119,86 @@ export class PaymentService {
     return sorted;
   }
 
-  // async getCampaignByOwnerId(id: string): Promise<Campaign[]> {
-  //   const campaign = await this.campaignModel.find({
-  //     restaurant_id: id,
-  //     deleted_at: null
-  //   });
-  //   return campaign;
-  // }
+  async quoteBill(createBillDto: CreateBillDto) {
+    const initStatus = BillStatus.PROGRESSING;
+    const new_bill = new this.billModel({
+      order: createBillDto.order,
+      status: initStatus,
+      payment_method: createBillDto.payment_method,
+    });
 
-  // async createCampaign(dto: CreateCampaignDto) {
-  //   const campaign = new this.campaignModel(dto);
-  //   return await campaign.save();
-  // }
+    let campaignDto: ApplyCampaignDto = {
+      compaign_ids: createBillDto.campaign_id,
+      subtotal: 0,
+      delivery_fare: 0,
+    };
+    if (createBillDto.order.order_type === OrderType.DELIVERY) {
+      const order = createBillDto.order as DeliveryOrder;
+      new_bill.sub_total = order.order_cost + order.delivery_fare;
+      campaignDto.delivery_fare = order.delivery_fare;
+      campaignDto.subtotal = order.order_cost;
+    } else {
+      const order = createBillDto.order as TransportOrder;
+      new_bill.sub_total = order.trip_fare;
+      campaignDto.subtotal = order.trip_fare;
+    }
 
-  // async deleteCampaign(campaign_id: string, restaurant_id: string) {
-  //   const now = new Date();
-  //   now.setTime(now.getTime() + (7 * 60 * 60 * 1000));
+    let discount = await this.campaignService.validateAndApplyCampaign(
+      createBillDto.order.customer._id,
+      campaignDto,
+      true,
+    );
 
-  //   const campaign = await this.campaignModel.findOne({
-  //     _id: campaign_id,
-  //     restaurant_id: restaurant_id
-  //   })
+    new_bill.discount = discount;
+    new_bill.total = new_bill.sub_total - discount + new_bill.platform_fee;
+    return new_bill;
+  }
 
-  //   if(!campaign) {
-  //     throw new NotFoundException('Campaign not found')
-  //   }
+  async createBill(createBillDto: CreateBillDto) {
+    const initStatus = BillStatus.PROGRESSING;
+    const new_bill = new this.billModel({
+      order: createBillDto.order,
+      status: initStatus,
+      payment_method: createBillDto.payment_method,
+      campaign_id: createBillDto.campaign_id,
+    });
 
-  //   campaign.deleted_at = now;
-  //   await campaign.save();
+    let campaignDto: ApplyCampaignDto = {
+      compaign_ids: createBillDto.campaign_id,
+      subtotal: 0,
+      delivery_fare: 0,
+    };
+    if (createBillDto.order.order_type === OrderType.DELIVERY) {
+      const order = createBillDto.order as DeliveryOrder;
+      new_bill.sub_total = order.order_cost + order.delivery_fare;
+      campaignDto.delivery_fare = order.delivery_fare;
+      campaignDto.subtotal = order.order_cost;
+    } else {
+      const order = createBillDto.order as TransportOrder;
+      new_bill.sub_total = order.trip_fare;
+      campaignDto.subtotal = order.trip_fare;
+    }
 
-  //   return campaign;
-  // }
+    let discount = await this.campaignService.validateAndApplyCampaign(
+      createBillDto.order.customer._id,
+      campaignDto,
+    );
+    new_bill.discount = discount;
+    new_bill.total = new_bill.sub_total - discount + new_bill.platform_fee;
 
-  // async updateCampaign(dto: UpdateCampaignnDto) {
-  //   const campaign = await this.campaignModel.findByIdAndUpdate(dto.id, dto, { new: true })
-  //   return campaign;
-  // }
-
-  // isValidCampaign(customer_id: string, campaign: Campaign, campaignDto: ApplyCampaignDto){
-  //   const currDate = new Date();
-  //   return campaign &&
-  //     campaign.conditions.start_time <= currDate &&
-  //     campaign.conditions.end_time >= currDate &&
-  //     campaign.quotas.limit > campaign.unavailable_users.length &&
-  //     campaign.unavailable_users.filter(id => id === customer_id).length < campaign.quotas.total_count_per_count &&
-  //     campaignDto.subtotal >= campaign.conditions.minBasketAmount;
-  // }
-
-  // async validateAndApplyCampaign(customer_id: string, campaignDto: ApplyCampaignDto, quote: boolean = false): Promise<number>{
-  //   let total_discount_value = 0;
-  //   for (const campaign_id of campaignDto.compaign_ids) {
-  //     const campaign = await this.campaignModel.findById(campaign_id);
-  //     if (this.isValidCampaign(customer_id, campaign, campaignDto)) {
-  //       if(!quote){
-  //         // campaign.unavailable_users.push(customer_id);
-  //         // campaign.save();
-  //       }
-
-  //       switch (campaign.discount.type) {
-  //         case CampaignDiscountType.DELIVERY:
-  //           total_discount_value += (campaignDto.delivery_fare - campaign.discount.value) > 0 ? campaign.discount.value : campaignDto.delivery_fare;
-  //           break;
-
-  //         case CampaignDiscountType.NET:
-  //           switch(campaign.discount.scope.type) {
-  //             case CampaignScopeType.ORDER:
-  //               const discount_value = campaignDto.subtotal - campaign.discount.value;
-  //               total_discount_value += discount_value > 0 ? campaign.discount.value : campaignDto.subtotal
-  //               break;
-  //             case CampaignScopeType.CATEGORY:
-  //               break;
-  //             case CampaignScopeType.ITEMS:
-  //               break;
-  //           }
-  //           break;
-
-  //         case CampaignDiscountType.PERCENTAGE:
-  //           switch(campaign.discount.scope.type){
-  //             case CampaignScopeType.ORDER:
-  //               const discount_value = campaignDto.subtotal * (campaign.discount.value / 100)
-  //               if(discount_value <= campaign.discount.cap) {
-  //                 total_discount_value += discount_value
-  //               } else total_discount_value += campaign.discount.cap
-  //               break;
-  //             case CampaignScopeType.CATEGORY:
-  //               break;
-  //             case CampaignScopeType.ITEMS:
-  //               break;
-  //           }
-  //           break;
-
-  //         case CampaignDiscountType.TRANSPORT:
-  //           const discount_value = campaignDto.subtotal - campaign.discount.value;
-  //           total_discount_value += discount_value > 0 ? campaign.discount.value : campaignDto.subtotal
-  //           break;
-
-  //         default:
-  //           break
-  //       }
-  //     }
-  //   }
-  //   return total_discount_value;
-  // }
-
-  // async quoteBill(createBillDto: CreateBillDto) {
-  //   const initStatus = createBillDto.payment_method === PaymentMethod.CASH ? BillStatus.PENDING : BillStatus.PAID;
-  //   const new_bill = new this.billModel({
-  //     order: createBillDto.order,
-  //     status: initStatus,
-  //     payment_method: createBillDto.payment_method,
-  //   });
-
-  //   //todo tính tiền từ promotion
-  //   let campaignDto: ApplyCampaignDto = {
-  //     compaign_ids: createBillDto.campaign_id,
-  //     subtotal: 0,
-  //     delivery_fare: 0
-  //   }
-  //   if (createBillDto.order.order_type === OrderType.DELIVERY) {
-  //     const order = createBillDto.order as DeliveryOrder
-  //     new_bill.sub_total = order.order_cost + order.delivery_fare;
-  //     campaignDto.delivery_fare = order.delivery_fare
-  //     campaignDto.subtotal = order.order_cost;
-  //   } else {
-  //     const order = createBillDto.order as TransportOrder
-  //     new_bill.sub_total = order.trip_fare;
-  //     campaignDto.subtotal = order.trip_fare;
-  //   }
-
-  //   let discount = await this.validateAndApplyCampaign(createBillDto.order.customer._id, campaignDto, true);
-  //   new_bill.discount = discount;
-  //   new_bill.total = new_bill.sub_total - discount + new_bill.platform_fee;
-
-  //   return new_bill;
-  // }
-
-  // async createBill(createBillDto: CreateBillDto) {
-  //   console.log(createBillDto.payment_method)
-  //   const initStatus = createBillDto.payment_method === PaymentMethod.CASH ? BillStatus.PENDING : BillStatus.PAID;
-  //   const new_bill = new this.billModel({
-  //     order: createBillDto.order,
-  //     status: initStatus,
-  //     payment_method: createBillDto.payment_method,
-  //     campaign_id: createBillDto.campaign_id
-  //   });
-
-  //   //todo tính tiền từ promotion
-  //   let campaignDto: ApplyCampaignDto = {
-  //     compaign_ids: createBillDto.campaign_id,
-  //     subtotal: 0,
-  //     delivery_fare: 0
-  //   }
-  //   if (createBillDto.order.order_type === OrderType.DELIVERY) {
-  //     const order = createBillDto.order as DeliveryOrder
-  //     new_bill.sub_total = order.order_cost + order.delivery_fare;
-  //     campaignDto.delivery_fare = order.delivery_fare
-  //     campaignDto.subtotal = order.order_cost;
-  //   } else {
-  //     const order = createBillDto.order as TransportOrder
-  //     new_bill.sub_total = order.trip_fare;
-  //     campaignDto.subtotal = order.trip_fare;
-  //   }
-
-  //   let discount = await this.validateAndApplyCampaign(createBillDto.order.customer._id, campaignDto, true);
-  //   new_bill.discount = discount;
-  //   new_bill.total = new_bill.sub_total - discount + new_bill.platform_fee;
-
-  //   return (await new_bill.save()).toJSON();
-  // }
+    return (await new_bill.save()).toJSON();
+  }
 
   async updateBillCancel(order: OrderDetailsType) {
     await this.billModel
       .findOneAndUpdate(order.bill, { status: BillStatus.CANCELLED })
       .exec();
+  }
+
+  async updateBillPaid(orderId: string) {
+    return await this.billModel.findByIdAndUpdate(orderId, {
+      status: BillStatus.PAID,
+    });
   }
 
   async getBill(id: string): Promise<BillDocument> {

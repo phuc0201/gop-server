@@ -8,7 +8,6 @@ import {
   Delete,
   UseGuards,
   Req,
-  InternalServerErrorException,
   Res,
 } from '@nestjs/common';
 import { CustomerService } from './customer.service';
@@ -17,26 +16,14 @@ import { RolesGuard } from 'src/utils/guards/roles.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from 'src/utils/decorators/roles.decorator';
 import { PaymentMethod, RoleType } from 'src/utils/enums';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderService } from 'src/order/order.service';
-import { CreateTransportOrderDto } from 'src/order/dto/create-transport-order';
-import {
-  ICampaign,
-  ICustomerController,
-  RequestWithUser,
-} from 'src/utils/interfaces';
-import { CreateDeliveryOrderDto } from 'src/order/dto/create-delivery-order';
-import { RestaurantService } from 'src/restaurant/restaurant.service';
+import { ICustomerController, RequestWithUser } from 'src/utils/interfaces';
 import { PaymentService } from 'src/payment/payment.service';
-import { ApplyCampaignDto } from 'src/payment/dto/apply-campaign.dto';
-import { error } from 'console';
-import e, { Response } from 'express';
-import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { Response } from 'express';
 
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiTags('Customer')
-@Controller('api/v1/customer')
+@Controller('customer')
 @Roles(RoleType.CUSTOMER)
 export class CustomerController implements ICustomerController {
   constructor(

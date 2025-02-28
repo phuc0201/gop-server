@@ -8,6 +8,7 @@ import {
   RevenueHistory,
   RevenueHistorySchema,
 } from './entities/revenue_history.schem';
+import { CampaignModule } from 'src/campaign/campaign.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import {
       { name: Ledger.name, schema: LedgerSchema },
       { name: RevenueHistory.name, schema: RevenueHistorySchema },
     ]),
+    CampaignModule,
   ],
   controllers: [PaymentController],
   providers: [PaymentService],

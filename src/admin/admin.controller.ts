@@ -18,7 +18,7 @@ import { OrderService } from 'src/order/order.service';
 import { RestaurantService } from 'src/restaurant/restaurant.service';
 import { ApiTags } from '@nestjs/swagger';
 @ApiTags('Admin')
-@Controller('api/v1/admin')
+@Controller('admin')
 export class AdminController implements IAdminController, ICampaign {
   constructor(
     private readonly adminService: AdminService,

@@ -3,9 +3,7 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
-  Delete,
   UseGuards,
   Req,
   InternalServerErrorException,
@@ -19,7 +17,7 @@ import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
 import { CreateTransportOrderDto } from './dto/create-transport-order';
 import { RolesGuard } from 'src/utils/guards/roles.guard';
 import { AuthGuard } from '@nestjs/passport';
-import { IOrderController, RequestWithUser } from 'src/utils/interfaces';
+import { RequestWithUser } from 'src/utils/interfaces';
 import { Roles } from 'src/utils/decorators/roles.decorator';
 import {
   OrderStatus,
@@ -35,16 +33,14 @@ import { DeliveryOrderType } from './entities/delivery_order.schema';
 import { DriverService } from 'src/driver/driver.service';
 import { Response } from 'express';
 import { CreateDeliveryOrderDto } from './dto/create-delivery-order';
-import { log } from 'console';
 
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiTags('Order')
-@Controller('api/v1/order')
+@Controller('order')
 export class OrderController {
   constructor(
     private readonly orderService: OrderService,
-    private readonly eventEmitter: EventEmitter2,
     private readonly socketGateway: SocketGateway,
     private readonly driverService: DriverService,
   ) {}
@@ -117,18 +113,27 @@ export class OrderController {
     }
   }
 
-  // @Roles(RoleType.CUSTOMER)
-  // @Post('quote/delivery')
-  // quoteDeliveryOrder(@Body() createOrderDto: CreateDeliveryOrderDto, @Req() req: RequestWithUser): Promise<any> {
-  //   return this.orderService.DeliveryOrderQuote(createOrderDto, req.user.sub);
-  // }
+  @Roles(RoleType.CUSTOMER)
+  @Post('quote/delivery')
+  quoteDeliveryOrder(
+    @Body() createOrderDto: CreateDeliveryOrderDto,
+    @Req() req: RequestWithUser,
+  ): Promise<any> {
+    return this.orderService.DeliveryOrderQuote(createOrderDto, req.user.sub);
+  }
 
-  // @Post('create/delivery')
-  // async placeDeliveryOrder(@Body() createOrderDto: CreateDeliveryOrderDto, @Req() req: RequestWithUser) {
-  //   const bill = await this.orderService.DeliveryOrderPlace(createOrderDto, req.user.sub);
-  //   this.socketGateway.placeDeliveryOrder(createOrderDto.restaurant_id);
-  //   return bill
-  // }
+  @Post('create/delivery')
+  async placeDeliveryOrder(
+    @Body() createOrderDto: CreateDeliveryOrderDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const bill = await this.orderService.DeliveryOrderPlace(
+      createOrderDto,
+      req.user.sub,
+    );
+    // this.socketGateway.placeDeliveryOrder(createOrderDto.restaurant_id);
+    return bill;
+  }
 
   @Roles(RoleType.CUSTOMER)
   @Post('customer/cancel/:id')

@@ -1,11 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import {
-    SWAGGER_API_ROOT,
-    SWAGGER_API_NAME,
-    SWAGGER_API_DESCRIPTION,
-    SWAGGER_API_CURRENT_VERSION,
-    SWAGGER_API_SITE_TITLE,
+  SWAGGER_API_ROOT,
+  SWAGGER_API_NAME,
+  SWAGGER_API_DESCRIPTION,
+  SWAGGER_API_CURRENT_VERSION,
+  SWAGGER_API_SITE_TITLE,
 } from './constants';
 import { SwaggerDocumentOptions } from './option.type';
 
@@ -18,38 +18,36 @@ import { SwaggerDocumentOptions } from './option.type';
  */
 
 export function setupSwagger(app: INestApplication): void {
-    const config = new DocumentBuilder()
-        .setTitle(SWAGGER_API_NAME)
-        .setDescription(SWAGGER_API_DESCRIPTION)
-        .setVersion(SWAGGER_API_CURRENT_VERSION)
-        .addBearerAuth()
-        .setExternalDoc('Postman Collection', '/docs-json')
+  const config = new DocumentBuilder()
+    .setTitle(SWAGGER_API_NAME)
+    .setDescription(SWAGGER_API_DESCRIPTION)
+    .setVersion(SWAGGER_API_CURRENT_VERSION)
+    .addBearerAuth()
+    .setExternalDoc('Postman Collection', '/docs-json')
 
-        .build();
+    .build();
 
-    const options: SwaggerDocumentOptions = {
-      ignoreGlobalPrefix: true,
-      operationIdFactory: (controllerKey: string, methodKey: string) =>
-            methodKey,
-    };
-    const document = SwaggerModule.createDocument(app, config, options);
-    SwaggerModule.setup(SWAGGER_API_ROOT, app, document, {
-        customfavIcon: 'https://gopstorage0.blob.core.windows.net/appicon/logo.png',
-        customJs: [
-          'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui-bundle.min.js',
-          'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui-standalone-preset.min.js',
-        ],
-        customCssUrl: [
-          'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui.min.css',
-          'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui.css',
-        ],
-        customSiteTitle: SWAGGER_API_SITE_TITLE,
-        swaggerOptions: {
-          docExpansion: 'none',
-          filter: true,
-          showRequestDuration: true,
-        },
-        jsonDocumentUrl: '/docs-json',
-      }
-    );
+  const options: SwaggerDocumentOptions = {
+    ignoreGlobalPrefix: false,
+    operationIdFactory: (controllerKey: string, methodKey: string) => methodKey,
+  };
+  const document = SwaggerModule.createDocument(app, config, options);
+  SwaggerModule.setup(SWAGGER_API_ROOT, app, document, {
+    customfavIcon: 'https://gopstorage0.blob.core.windows.net/appicon/logo.png',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui-bundle.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui-standalone-preset.min.js',
+    ],
+    customCssUrl: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui.min.css',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.10.5/swagger-ui.css',
+    ],
+    customSiteTitle: SWAGGER_API_SITE_TITLE,
+    swaggerOptions: {
+      docExpansion: 'none',
+      filter: true,
+      showRequestDuration: true,
+    },
+    jsonDocumentUrl: '/docs-json',
+  });
 }

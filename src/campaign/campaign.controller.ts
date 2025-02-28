@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CampaignService } from './campaign.service';
 
@@ -7,8 +7,15 @@ import { CampaignService } from './campaign.service';
 export class CampaignController {
   constructor(private readonly campaignService: CampaignService) {}
 
-  @Get('/')
+  @Get('all')
   getCampaign() {
     return this.campaignService.getAllCampaign();
+  }
+
+  @Get('')
+  getCampaignAvailableForRestaurant(@Query() query: { restaurantId: string }) {
+    return this.campaignService.getCampaignAvailableForRestaurant(
+      query.restaurantId,
+    );
   }
 }

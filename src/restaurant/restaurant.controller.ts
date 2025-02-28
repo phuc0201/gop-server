@@ -14,49 +14,32 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { RestaurantService } from './restaurant.service';
-import { CreateRestaurantDto } from './dto/create-restaurant.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/utils/guards/roles.guard';
 import { Roles } from 'src/utils/decorators/roles.decorator';
-import {
-  OTPType,
-  OTPVerifyStatus,
-  OrderStatus,
-  RestaurantStatus,
-  RoleType,
-} from 'src/utils/enums';
-import { AuthService } from 'src/auth/auth.service';
-import {
-  ICampaign,
-  IRestaurantController,
-  RequestWithUser,
-} from 'src/utils/interfaces';
+import { RestaurantStatus, RoleType } from 'src/utils/enums';
+import { RequestWithUser } from 'src/utils/interfaces';
 import { CreateRestaurantCategoryDto } from './dto/create-restaurant-category.dto';
-import { UpdateItemsRestaurantDto } from './dto/update-item-restaurant-category.dto';
+
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderService } from 'src/order/order.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { FoodItemDto } from './dto/food-item.dto';
 import { CreateFoodItemDto } from './dto/create-food-item.dto';
-import { RestaurantCategoryService } from './restaurant_category.service';
 import { UpdateRestaurantCategoryDto } from './dto/update-restaurant-category.dto';
 import { UpdateFoodItemDto } from './dto/update-food-item.dto';
 import { PaymentService } from 'src/payment/payment.service';
-import { CreateCampaignDto } from 'src/payment/dto/create-campaign.dto';
-import { UpdateCampaignnDto } from 'src/payment/dto/update-campaign.dto';
 import { ReviewDto } from './dto/review.dto';
 import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
+import { CampaignService } from 'src/campaign/campaign.service';
 
 @ApiBearerAuth()
 @ApiTags('Restaurants')
-@Controller('api/v1/restaurant')
+@Controller('restaurant')
 export class RestaurantController {
   constructor(
     private readonly restaurantService: RestaurantService,
-    private readonly eventEmitter: EventEmitter2,
-    private readonly paymentService: PaymentService,
+    private readonly campainService: CampaignService,
   ) {}
 
   @Get('cuisine-categories')
@@ -410,8 +393,15 @@ export class RestaurantController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(RoleType.RESTAURANT)
   @Get('campaigns')
-  getCampaigns(): Promise<any> {
-    throw new Error('Method not implemented.');
+  async getCampaigns(@Req() req: RequestWithUser): Promise<any> {
+    return await this.campainService.getCampaignByRestaurantId(req.user.sub);
+  }
+
+  // @UseGuards(AuthGuard('jwt'), RolesGuard)
+  // @Roles(RoleType.CUSTOMER)
+  @Get(':id/campaigns')
+  async getCampaignsByCustomer(@Param() query: { id: string }): Promise<any> {
+    return await this.campainService.getCampaignByRestaurantId(query.id);
   }
 
   // @Roles(RoleType.RESTAURANT)

@@ -7,23 +7,14 @@ import { CreateTransportOrderDto } from './dto/create-transport-order';
 import { VietMapService } from 'src/utils/map-api/viet-map.service';
 import {
   BikeFare,
-  BillStatus,
   CarFare,
   DistanceFare,
-  OTPType,
-  OTPVerifyStatus,
   OrderStatus,
   OrderType,
-  PaymentMethod,
   RestaurantStatus,
   VehicleType,
 } from 'src/utils/enums';
-import { CreateDeliveryOrderDto } from './dto/create-delivery-order';
-import { LocationObject } from 'src/utils/subschemas/location.schema';
-import { OrderFoodItems } from './entities/order_food_items.schema';
-import { Otp, OtpDocument } from 'src/auth/entities/otp.schema';
 import { PaymentService } from 'src/payment/payment.service';
-import { CreateBillDto } from 'src/payment/dto/create-bill.dto';
 import { Order, OrderDetails } from './entities/order.schema';
 import {
   TransportOrder,
@@ -37,8 +28,8 @@ import { BaseServiceAbstract } from 'src/utils/repository/base.service';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { Driver } from 'src/driver/entities/driver.schema';
 import { RestaurantService } from 'src/restaurant/restaurant.service';
-import { FoodItemDto } from 'src/restaurant/dto/food-item.dto';
 import { ObjectId } from 'mongodb';
+import { CreateDeliveryOrderDto } from './dto/create-delivery-order';
 @Injectable()
 export class OrderService extends BaseServiceAbstract<OrderDetails> {
   constructor(
@@ -475,83 +466,105 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
   //     return (await new_transport_order.save()).toObject();
   // }
 
-  // async DeliveryOrderQuote(dto: CreateDeliveryOrderDto, customer_id: string){
-  //     const restaurant_location = await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
+  async DeliveryOrderQuote(dto: CreateDeliveryOrderDto, customer_id: string) {
+    const restaurant_location =
+      await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
 
-  //     const new_dto = {...dto, customer: customer_id}
+    const new_dto = { ...dto, customer: customer_id };
 
-  //     const new_order = new this.deliveryOrderModel(new_dto);
+    const new_order = new this.deliveryOrderModel(new_dto);
 
-  //     Object.assign(new_order, await this.vietMapService.getDistanceNDuration(restaurant_location, dto.delivery_location, VehicleType.BIKE));
+    Object.assign(
+      new_order,
+      await this.vietMapService.getDistanceNDuration(
+        restaurant_location,
+        dto.delivery_location,
+        VehicleType.BIKE,
+      ),
+    );
 
-  //     new_order.delivery_fare = this.calculateFare(new_order.distance, BikeFare);
+    new_order.delivery_fare = this.calculateFare(new_order.distance, BikeFare);
 
-  //     for (let item of dto.items){
-  //         new_order.order_cost += await this.restaurantService.food_calculateFare(item)
-  //     }
+    for (let item of dto.items) {
+      new_order.order_cost +=
+        await this.restaurantService.food_calculateFare(item);
+    }
 
-  //     const bill = await this.paymentService.quoteBill({
-  //         payment_method: dto.payment_method,
-  //         campaign_id: dto.campaign_ids,
-  //         order: new_order,
-  //     });
+    const bill = await this.paymentService.quoteBill({
+      payment_method: dto.payment_method,
+      campaign_id: dto.campaign_ids,
+      order: new_order,
+    });
 
-  //     const discount = bill.discount;
-  //     const total = bill.total;
-  //     return { ...new_order.toJSON(), discount, total };
-  // }
+    const discount = bill.discount;
+    const total = bill.total;
+    return { ...new_order.toJSON(), discount, total };
+  }
 
-  // async DeliveryOrderPlace(dto: CreateDeliveryOrderDto, customer_id: string) {
-  //     const restaurant_location = await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
+  async DeliveryOrderPlace(dto: CreateDeliveryOrderDto, customer_id: string) {
+    const restaurant = await this.restaurantService.findOneById(
+      dto.restaurant_id,
+    );
 
-  //     const restaurant = await this.restaurantService.findOneById(dto.restaurant_id);
+    if (restaurant.status === RestaurantStatus.CLOSED) {
+      return {
+        msg: 'Restaurant closed',
+        bill: {},
+      };
+    }
 
-  //     if(restaurant.status === RestaurantStatus.CLOSED){
-  //         return {
-  //             msg: 'Restaurant closed',
-  //             bill: {}
-  //         }
-  //     }
+    const new_dto = {
+      ...dto,
+      customer: customer_id,
+      restaurant: dto.restaurant_id,
+    };
 
-  //     const new_dto = {...dto, customer: customer_id, restaurant: dto.restaurant_id}
+    const new_order = new this.deliveryOrderModel(new_dto);
 
-  //     const new_order = new this.deliveryOrderModel(new_dto);
+    const now = new Date();
+    now.setTime(now.getTime() + 7 * 60 * 60 * 1000);
 
-  //     const now = new Date();
-  //     // now.setTime(now.getTime() + (7 * 60 * 60 * 1000));
+    new_order.confirm_time = null;
+    new_order.complete_time = null;
+    new_order.order_time = now;
 
-  //     new_order.confirm_time = null;
-  //     new_order.complete_time = null;
-  //     new_order.order_time = now;
+    Object.assign(
+      new_order,
+      await this.vietMapService.getDistanceNDuration(
+        restaurant.location,
+        dto.delivery_location,
+        VehicleType.BIKE,
+      ),
+    );
 
-  //     Object.assign(new_order, await this.vietMapService.getDistanceNDuration(restaurant_location, dto.delivery_location, VehicleType.BIKE));
+    new_order.delivery_fare = this.calculateFare(new_order.distance, BikeFare);
 
-  //     new_order.delivery_fare = this.calculateFare(new_order.distance, BikeFare);
+    const orderCostPromises = dto.items.map(async (item) => {
+      return this.restaurantService.food_calculateFare(item);
+    });
 
-  //     const orderCostPromises = dto.items.map(async (item) => {
-  //         return this.restaurantService.food_calculateFare(item);
-  //       });
-  //     new_order.order_cost = await Promise.all(orderCostPromises).then((costs) => costs.reduce((sum, cost) => sum + cost, 0));
+    new_order.order_cost = await Promise.all(orderCostPromises).then((costs) =>
+      costs.reduce((sum, cost) => sum + cost, 0),
+    );
 
-  //     const bill = await this.paymentService.createBill({
-  //         payment_method: dto.payment_method,
-  //         campaign_id: dto.campaign_ids,
-  //         order: new_order,
-  //     });
+    const bill = await this.paymentService.createBill({
+      payment_method: dto.payment_method,
+      campaign_id: dto.campaign_ids,
+      order: new_order,
+    });
 
-  //     new_order.order_status = OrderStatus.PENDING_CONFIRM;
+    new_order.order_status = OrderStatus.PENDING_CONFIRM;
 
-  //     const newBill = { ...bill}
-  //     new_order.bill = newBill;
+    new_order.bill = { ...bill };
 
-  //     const { order, ...billWithoutOrder } = bill;
+    const { order, ...billWithoutOrder } = bill;
 
-  //     await new_order.save();
-  //     return {
-  //         order: order._id,
-  //         ...billWithoutOrder
-  //     };
-  // }
+    await new_order.save();
+    return {
+      order: order._id,
+      ...billWithoutOrder,
+    };
+  }
 
   async trackingDeliveryOrder(orderId: string) {
     const order = await this.orderModel.findById(orderId);
