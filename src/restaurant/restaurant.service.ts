@@ -427,13 +427,18 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     ]);
 
     const restaurantWithCampaigns = new Set(
-      campaigns.map((cmp) => cmp.restaurant_id.toString()),
+      campaigns.map((cmp) =>
+        cmp.restaurant_id ? cmp.restaurant_id.toString() : null,
+      ),
     );
 
     let combinedRestaurants = await Promise.all(
       restaurants.map(async (res, index) => {
         const { location, cuisine_categories, ...newRes } = { ...res.toJSON() };
-        const hasCmp = restaurantWithCampaigns.has(res.id.toString());
+        const hasCmp = restaurantWithCampaigns.has(null)
+          ? true
+          : restaurantWithCampaigns.has(res.id);
+
         const review = avgRatings.find((rev) => rev.restaurantId == res.id);
         return {
           ...newRes,

@@ -86,7 +86,7 @@ export enum BillStatus {
 }
 
 export enum PaymentMethod {
-  CASH = 'CASH',
+  COD = 'COD',
   VNPAY = 'VNPAY',
   GOP_Wallet = 'GOP_Wallet',
 }

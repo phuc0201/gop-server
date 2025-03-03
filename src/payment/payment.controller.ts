@@ -13,13 +13,13 @@ export class PaymentController {
   async getVnpayLink(
     @Req() req: RequestWithUser,
     @Ip() ip: string,
-    @Body() body: { amount: number; orderId: string; returnUrl: string },
+    @Body() body: { amount: number; billId: string; returnUrl: string },
   ) {
     try {
       return this.paymentService.createURLVnPay(
         ip,
         body.amount,
-        body.orderId,
+        body.billId,
         body.returnUrl,
       );
     } catch (e) {
@@ -28,7 +28,7 @@ export class PaymentController {
   }
 
   @Get('vnpay/return')
-  vnPayReturn(@Query() vnpParams: any) {
+  async vnPayReturn(@Query() vnpParams: any) {
     const isValidSignature = this.paymentService.verifyReturnUrl(vnpParams);
 
     if (!isValidSignature) {
@@ -38,12 +38,12 @@ export class PaymentController {
     const isSuccess = vnpParams['vnp_ResponseCode'] === '00';
 
     if (isSuccess) {
-      this.paymentService.updateBillPaid(vnpParams['vnp_TxnRef']);
+      await this.paymentService.updateBillPaid(vnpParams['vnp_TxnRef']);
     }
 
     return {
       error: isSuccess ? false : true,
-      orderId: vnpParams['vnp_TxnRef'],
+      billId: vnpParams['vnp_TxnRef'],
       amount: vnpParams['vnp_Amount'] / 100,
       message: isSuccess ? 'Payment successful' : 'Payment failed',
     };
@@ -53,11 +53,11 @@ export class PaymentController {
   async getRefundUrl(
     @Req() req: RequestWithUser,
     @Ip() ip: string,
-    @Body() body: { amount: number; orderId: string; transDate: string },
+    @Body() body: { amount: number; billId: string; transDate: string },
   ) {
     try {
       return this.paymentService.createRefundUrlVNPay(
-        body.orderId,
+        body.billId,
         body.amount,
         body.transDate,
       );

@@ -32,7 +32,7 @@ export class PaymentService {
     this.hashSecret = this.configService.get<string>('VNPAY_HASH_SECRET');
   }
 
-  createURLVnPay(ip: string, amount: number, orderId: string, url: string) {
+  createURLVnPay(ip: string, amount: number, billId: string, url: string) {
     const date = new Date();
     let tmnCode = this.tmnCode;
     let secretKey = this.hashSecret;
@@ -47,8 +47,8 @@ export class PaymentService {
     vnp_Params['vnp_TmnCode'] = tmnCode;
     vnp_Params['vnp_Locale'] = locale;
     vnp_Params['vnp_CurrCode'] = currCode;
-    vnp_Params['vnp_TxnRef'] = orderId;
-    vnp_Params['vnp_OrderInfo'] = 'Thanh toan cho ma GD: ' + orderId;
+    vnp_Params['vnp_TxnRef'] = billId;
+    vnp_Params['vnp_OrderInfo'] = 'Thanh toan cho ma GD: ' + billId;
     vnp_Params['vnp_OrderType'] = 'other';
     vnp_Params['vnp_Amount'] = amount * 100;
     vnp_Params['vnp_ReturnUrl'] = returnUrl;
@@ -195,8 +195,8 @@ export class PaymentService {
       .exec();
   }
 
-  async updateBillPaid(orderId: string) {
-    return await this.billModel.findByIdAndUpdate(orderId, {
+  async updateBillPaid(billId: string) {
+    return await this.billModel.findByIdAndUpdate(billId, {
       status: BillStatus.PAID,
     });
   }
@@ -215,7 +215,7 @@ export class PaymentService {
         // cập nhật ledger cho restaurant và driver với 90% lợi nhuận
         this.updateLedger(order.restaurant._id, order, order.order_cost * 0.9);
         this.updateLedger(order.driver._id, order, order.delivery_fare * 0.9);
-      } else if (bill.payment_method === PaymentMethod.CASH) {
+      } else if (bill.payment_method === PaymentMethod.COD) {
         // cập nhật ledgers cho restaurant và drivers trả 10% lợi nhận cho nền tảng
         this.updateLedger(order.restaurant._id, order, order.order_cost * -0.1);
         this.updateLedger(order.driver._id, order, order.delivery_fare * 0.9);
@@ -224,7 +224,7 @@ export class PaymentService {
       if (bill.payment_method === PaymentMethod.VNPAY) {
         // cập nhật ledgers cho drivers với 90% lợi nhuận
         this.updateLedger(order.driver._id, order, order.trip_fare * 0.9);
-      } else if (bill.payment_method === PaymentMethod.CASH) {
+      } else if (bill.payment_method === PaymentMethod.COD) {
         // cập nhật ledgers cho drivers trả 10% lợi nhuận cho nền tảng
         this.updateLedger(
           order.driver._id,

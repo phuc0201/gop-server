@@ -14,7 +14,7 @@ export class CreateDeliveryOrderDto extends CreateOrderDto {
   restaurant_id: string;
 
   @ApiProperty({
-    example: PaymentMethod.CASH,
+    example: PaymentMethod.COD,
   })
   @IsEnum(PaymentMethod)
   payment_method: PaymentMethod;

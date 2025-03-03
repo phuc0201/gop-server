@@ -397,8 +397,8 @@ export class RestaurantController {
     return await this.campainService.getCampaignByRestaurantId(req.user.sub);
   }
 
-  // @UseGuards(AuthGuard('jwt'), RolesGuard)
-  // @Roles(RoleType.CUSTOMER)
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(RoleType.CUSTOMER)
   @Get(':id/campaigns')
   async getCampaignsByCustomer(@Param() query: { id: string }): Promise<any> {
     return await this.campainService.getCampaignByRestaurantId(query.id);

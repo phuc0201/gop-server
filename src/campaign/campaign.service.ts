@@ -52,7 +52,7 @@ export class CampaignService {
   async getCampaignsByRestaurantIds(restaurantIds: string[]) {
     const currDate = new Date();
     const campaigns = await this.campaignModel.find({
-      restaurant_id: { $in: restaurantIds },
+      $or: [{ restaurant_id: { $in: restaurantIds } }, { restaurant_id: null }],
       deleted_at: null,
     });
 

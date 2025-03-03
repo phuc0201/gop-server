@@ -421,8 +421,20 @@ export class OrderController {
     }
   }
 
-  @Get(':id/details')
-  findOrderDetails(@Param('id') id: string) {
+  // @Get('history')
+  // async getOrderHistoryByRestaurant(@Req() req: RequestWithUser) {
+  //   try {
+  //     const orders = await this.orderService.findOrderHistoryByRestaurant(
+  //       req.user.sub,
+  //     );
+  //     return orders;
+  //   } catch (error) {
+  //     throw new Error('Get orders failed');
+  //   }
+  // }
+
+  @Get(':billId/details')
+  findOrderDetails(@Param('billId') id: string) {
     try {
       const order = this.orderService.getOrderDetails(id);
       return order;
@@ -433,7 +445,7 @@ export class OrderController {
 
   @Get(':id/tracking')
   async findOrderSate(@Param('id') id: string) {
-    const orderState = await this.orderService.trackingDeliveryOrder(id);
+    const orderState = await this.orderService.findOneById(id);
     return {
       _id: id,
       state: orderState,

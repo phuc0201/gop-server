@@ -24,7 +24,7 @@ export class Bill extends BaseEntity {
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true, ref: 'Order' })
   order: Order;
 
-  @Prop({ required: true, enum: PaymentMethod, default: PaymentMethod.CASH })
+  @Prop({ required: true, enum: PaymentMethod, default: PaymentMethod.COD })
   payment_method: PaymentMethod;
 
   @Prop()

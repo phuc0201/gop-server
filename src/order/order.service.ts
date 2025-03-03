@@ -1,6 +1,4 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateOrderDto } from './dto/update-order.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Schema } from 'mongoose';
 import { CreateTransportOrderDto } from './dto/create-transport-order';
@@ -66,7 +64,7 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
 
   async RestaurantCompleteOrder(orderId: string) {
     const now = new Date();
-    const order = await this.orderModel
+    await this.orderModel
       .findByIdAndUpdate(
         orderId,
         {
@@ -76,6 +74,8 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
         { new: true },
       )
       .exec();
+    await this.paymentService.updateBillPaid(orderId);
+
     return {
       msg: 'order completed',
     };
@@ -102,6 +102,16 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
       order_type: OrderType.DELIVERY,
       deleted_at: null,
     });
+
+    return orders;
+  }
+
+  async findOrderHistoryByRestaurant(restaurantId: string) {
+    const orders = await this.orderModel
+      .find({
+        restaurant: restaurantId,
+      })
+      .exec();
 
     return orders;
   }
@@ -133,7 +143,7 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
                 $project: {
                   restaurant_name: 1,
                   cover_image: 1,
-                  _id: 0,
+                  _id: 1,
                 },
               },
             ],
@@ -187,13 +197,18 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
             _id: '$_id',
             restaurant: { $first: '$restaurant' },
             total: { $first: '$bill.total' },
+            billId: { $first: '$bill._id' },
             items: {
               $push: {
                 quantity: '$items.quantity',
                 food_name: '$items.foodDetails.name',
               },
             },
+            updatedAt: { $first: '$updatedAt' },
           },
+        },
+        {
+          $sort: { updatedAt: -1 },
         },
       ])
       .exec();
@@ -316,7 +331,7 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
     const order = await this.orderModel.aggregate([
       {
         $match: {
-          _id: objectId,
+          bill: objectId,
         },
       },
       {
@@ -338,6 +353,25 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
       },
       {
         $unwind: '$customerInfo',
+      },
+      {
+        $lookup: {
+          from: 'restaurants',
+          localField: 'restaurant',
+          foreignField: '_id',
+          as: 'restaurantInfo',
+          pipeline: [
+            {
+              $project: {
+                location: 1,
+                restaurant_name: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $unwind: '$restaurantInfo',
       },
       {
         $lookup: {
@@ -402,11 +436,13 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
         $group: {
           _id: '$_id',
           customer: { $first: '$customerInfo' },
+          restaurant: { $first: '$restaurantInfo' },
           delivery_location: { $first: '$delivery_location' },
           order_time: { $first: '$order_time' },
           complete_time: { $first: '$complete_time' },
           confirm_time: { $first: '$confirm_time' },
           order_cost: { $first: '$order_cost' },
+          order_status: { $first: '$order_status' },
           delivery_fare: { $first: '$delivery_fare' },
           bill: { $first: '$bill' },
           items: {
@@ -566,10 +602,18 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
     };
   }
 
-  async trackingDeliveryOrder(orderId: string) {
-    const order = await this.orderModel.findById(orderId);
-    return order.order_status;
-  }
+  // async fetchOrderTrackingInfo(orderId: string) {
+  //   const order = await this.orderModel.findById({
+  //     id: orderId,
+  //   });
+
+  //   return order;
+  // }
+
+  // async trackingDeliveryOrder(orderId: string) {
+  //   const order = await this.orderModel.findById(orderId);
+  //   return order.order_status;
+  // }
 
   // async DeliveryOrderPlace_Cash(dto: CreateDeliveryOrderDto, customer_id: string): Promise<DeliveryOrderType> {
   //     const restaurant_location = await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
