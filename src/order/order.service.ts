@@ -365,6 +365,7 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
               $project: {
                 location: 1,
                 restaurant_name: 1,
+                id: 1,
               },
             },
           ],

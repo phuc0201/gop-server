@@ -107,7 +107,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   }
 
   async createReview(dto: ReviewDto) {
-    const review = new this.reviewModel(dto).save();
+    const review = await new this.reviewModel(dto).save();
     return review;
   }
 

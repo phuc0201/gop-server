@@ -64,7 +64,6 @@ export class OrderController {
       this.logger.log(
         `Driver ${driver._id} has been assigned to order ${payload._id}`,
       );
-      this.socketGateway.notifyOrderAssign_Driver(driver._id, payload._id);
     } else {
       this.logger.log(`No driver found for order ${payload._id}`);
       this.socketGateway.notifyOrderState(payload._id, OrderStatus.FAILED);
@@ -317,7 +316,7 @@ export class OrderController {
 
   //**  RESTAURANT  **/
 
-  @Roles(RoleType.RESTAURANT)
+  // @Roles(RoleType.RESTAURANT)
   @Get('restaurant/accept/:id')
   async acceptOrderRestaurant(
     @Req() req: RequestWithUser,
@@ -325,13 +324,14 @@ export class OrderController {
   ): Promise<any> {
     try {
       const res = await this.orderService.RestaurantAcceptOrder(id);
+      this.socketGateway.notifyOrderState(id, OrderStatus.PROGRESSING);
       return res;
     } catch (error) {
       throw new Error('Accept failed');
     }
   }
 
-  @Roles(RoleType.RESTAURANT)
+  // @Roles(RoleType.RESTAURANT)
   @Get('restaurant/complete/:id')
   completeOrderRestaurant(
     @Req() req: RequestWithUser,
@@ -339,6 +339,7 @@ export class OrderController {
   ): Promise<any> {
     try {
       const res = this.orderService.RestaurantCompleteOrder(id);
+      this.socketGateway.notifyOrderState(id, OrderStatus.COMPLETED);
       return res;
     } catch (error) {
       throw new Error('Complete failed');
@@ -371,25 +372,19 @@ export class OrderController {
     throw new Error('Method not implemented.');
   }
 
-  // todo update DTO
   @Roles(RoleType.RESTAURANT)
-  @Post('restaurant/history')
-  async orderHistoryRestaurant(
-    @Req() req: RequestWithUser,
-    dto: any,
-  ): Promise<any> {
-    return await this.orderService
+  @Get('restaurant/history')
+  async orderHistoryRestaurant(@Req() req: RequestWithUser): Promise<any> {
+    const orders = await this.orderService
       .findAll({
         order_type: OrderType.DELIVERY,
         restaurant: req.user.sub,
-        ...dto,
-      })
-      .then((order) => {
-        return order;
       })
       .catch((e) => {
         throw new InternalServerErrorException(e);
       });
+
+    return orders;
   }
 
   //**  COMMON FOR ADMIN  **/
