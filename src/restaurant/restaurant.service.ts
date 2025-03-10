@@ -23,10 +23,7 @@ import { ReviewDto } from './dto/review.dto';
 import { UpdateFoodItemDto } from './dto/update-food-item.dto';
 import { UpdateRestaurantCategoryDto } from './dto/update-restaurant-category.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
-import {
-  CuisineCategories,
-  CuisineCategoriesSchema,
-} from './entities/cuisine_categories.schema';
+import { CuisineCategories } from './entities/cuisine_categories.schema';
 import { Restaurant, RestaurantDocument } from './entities/restaurant.schema';
 import { RestaurantCategory } from './entities/restaurant_category.schema';
 import { Review } from './entities/review.schema';
@@ -371,6 +368,38 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         },
       },
     ]);
+  }
+
+  async findRestaurantsNearby(coordinates: number[], distance: number) {
+    const customerLocation = new LocationObject(coordinates, '');
+    const restaurants = await this.restaurantModel
+      .find({
+        location: {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: coordinates,
+            },
+            $maxDistance: distance,
+          },
+        },
+      })
+      .select('restaurant_name avatar location')
+      .exec();
+
+    const avgRatings = await this.calculateRestaurantAverageRating(
+      restaurants.map((res) => res.id),
+    );
+
+    return restaurants.map((res, index) => {
+      const review = avgRatings.find((rev) => rev.restaurantId == res.id);
+      const { location, ...newRes } = { ...res.toJSON() };
+      return {
+        ...newRes,
+        rating: review ? review.averageRating : 0,
+        address: location.address,
+      };
+    });
   }
 
   async getRestaurantsByCustomer(

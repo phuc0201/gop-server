@@ -1,20 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument, SchemaTypes } from 'mongoose';
-import {
-  CuisinesCategory,
-  RestaurantStatus,
-  RestaurantTier,
-} from 'src/utils/enums';
+import { HydratedDocument, SchemaTypes } from 'mongoose';
+import { RestaurantStatus, RestaurantTier } from 'src/utils/enums';
 import {
   RestaurantProfile,
   RestaurantProfileSchema,
 } from './restaurant_profile.schema';
-import { Rating, RatingSchema } from 'src/utils/subschemas/rating.schema';
 import { LocationObject } from 'src/utils/subschemas/location.schema';
-import {
-  RestaurantCategory,
-  RestaurantCategorySchema,
-} from './restaurant_category.schema';
+import { RestaurantCategory } from './restaurant_category.schema';
 import { Account } from 'src/auth/entities/account.schema';
 import { CuisineCategories } from './cuisine_categories.schema';
 
@@ -40,7 +32,7 @@ export class Restaurant extends Account {
   @Prop({ required: true })
   restaurant_name: string;
 
-  @Prop({})
+  @Prop({ type: LocationObject, index: '2dsphere' })
   location: LocationObject;
 
   @Prop({ required: true })

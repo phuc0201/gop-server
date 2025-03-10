@@ -108,6 +108,23 @@ export class RestaurantController {
     return await this.restaurantService.getMenu(req.user.sub);
   }
 
+  @Get('nearby')
+  async findRestaurantsNearby(
+    @Query() query: { coordinates: string; distance: number },
+  ) {
+    try {
+      const coordinates = query.coordinates.split(',').map(Number);
+      const result = await this.restaurantService.findRestaurantsNearby(
+        coordinates,
+        query.distance,
+      );
+
+      return result;
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch nearby restaurants');
+    }
+  }
+
   @Get('recommended')
   async getRestaurants(@Query() query: GetRestaurantsQueryDto) {
     const {
