@@ -384,22 +384,59 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           },
         },
       })
-      .select('restaurant_name avatar location')
+      .select('restaurant_name avatar location status')
+      .populate('cuisine_categories', 'name')
       .exec();
 
-    const avgRatings = await this.calculateRestaurantAverageRating(
-      restaurants.map((res) => res.id),
+    if (restaurants.length === 0) {
+      return [];
+    }
+
+    const [{ distances, durations }, avgRatings, campaigns] = await Promise.all(
+      [
+        this.vietmapService.getMultipleDistanceNDuration(
+          customerLocation,
+          restaurants.map((res) => res.location),
+          VehicleType.BIKE,
+        ),
+        this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
+        this.campaignService.getCampaignsByRestaurantIds(
+          restaurants.map((res) => res.id),
+        ),
+      ],
     );
 
-    return restaurants.map((res, index) => {
-      const review = avgRatings.find((rev) => rev.restaurantId == res.id);
-      const { location, ...newRes } = { ...res.toJSON() };
-      return {
-        ...newRes,
-        rating: review ? review.averageRating : 0,
-        address: location.address,
-      };
-    });
+    const restaurantWithCampaigns = new Set(
+      campaigns.map((cmp) =>
+        cmp.restaurant_id ? cmp.restaurant_id.toString() : null,
+      ),
+    );
+
+    const combinedRestaurants = restaurants
+      .map((res, index) => {
+        const review = avgRatings.find((rev) => rev.restaurantId == res.id);
+        const { location, ...newRes } = { ...res.toJSON() };
+        const hasCmp = restaurantWithCampaigns.has(null)
+          ? true
+          : restaurantWithCampaigns.has(res.id);
+        return {
+          ...newRes,
+          rating: review ? review.averageRating : 0,
+          location: res.location,
+          cuisine_categories: res.cuisine_categories.map(
+            (cat: any) => cat.name,
+          ),
+          isClosed: res.status === RestaurantStatus.CLOSED,
+          distance: distances[index],
+          duration: durations[index],
+          hasCampaign: hasCmp,
+        };
+      })
+      .filter((res) => res.distance <= distance);
+
+    combinedRestaurants.sort((a, b) => a.distance - b.distance);
+
+    return combinedRestaurants;
   }
 
   async getRestaurantsByCustomer(
