@@ -559,6 +559,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const dataPage = combinedRestaurants.slice(startIndex, endIndex);
 
     return {
+      cuisineId: cuisineId,
       currPage: page,
       totalPage: totalPages,
       data: dataPage,
