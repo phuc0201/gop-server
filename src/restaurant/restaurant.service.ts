@@ -392,19 +392,17 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       return [];
     }
 
-    const [{ distances, durations }, avgRatings, campaigns] = await Promise.all(
-      [
-        this.vietmapService.getMultipleDistanceNDuration(
-          customerLocation,
-          restaurants.map((res) => res.location),
-          VehicleType.BIKE,
-        ),
-        this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
-        this.campaignService.getCampaignsByRestaurantIds(
-          restaurants.map((res) => res.id),
-        ),
-      ],
-    );
+    const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
+      this.vietmapService.getMultipleDistanceNDuration(
+        restaurants.map((res) => res.location),
+        [customerLocation],
+        VehicleType.BIKE,
+      ),
+      this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
+      this.campaignService.getCampaignsByRestaurantIds(
+        restaurants.map((res) => res.id),
+      ),
+    ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -427,8 +425,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             (cat: any) => cat.name,
           ),
           isClosed: res.status === RestaurantStatus.CLOSED,
-          distance: distances[index],
-          duration: durations[index],
+          distance: distancesAndDurations[index].elements[0].distance.value,
+          duration: distancesAndDurations[index].elements[0].duration.value,
           hasCampaign: hasCmp,
         };
       })
@@ -484,8 +482,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
     const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
       this.vietmapService.getMultipleDistanceNDuration(
-        customerLocation,
         locations,
+        [customerLocation],
         VehicleType.BIKE,
       ),
       this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
@@ -509,8 +507,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         return {
           ...newRes,
           cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
-          distance: distancesAndDurations.distances[index],
-          duration: distancesAndDurations.durations[index],
+          distance: distancesAndDurations[index].elements[0].distance.value,
+          duration: distancesAndDurations[index].elements[0].duration.value,
           hasCampaign: hasCmp,
           rating: review ? review.averageRating : 0,
         };
@@ -534,10 +532,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     if (deliveryFee > -1) {
       combinedRestaurants = combinedRestaurants.filter(
         (r, index) =>
-          this.vietmapService.calculateFare(
-            distancesAndDurations.distances[index],
-            BikeFare,
-          ) <= deliveryFee,
+          this.vietmapService.calculateFare(0, BikeFare) <= deliveryFee,
       );
     }
 
@@ -622,8 +617,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     return {
       ...restaurantInfo,
       cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
-      distance,
-      duration,
+      distance: distance,
+      duration: duration,
       rating,
     };
   }

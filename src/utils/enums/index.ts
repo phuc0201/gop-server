@@ -21,8 +21,8 @@ export enum OTPType {
 
 // * Driver
 export enum VehicleType {
-  BIKE = 'MOTORBIKE',
-  CAR = 'CAR',
+  BIKE = 'bike',
+  CAR = 'car',
 }
 
 export enum DriverStatus {

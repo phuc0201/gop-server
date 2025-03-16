@@ -9,82 +9,65 @@ export class VietMapService {
   constructor(private readonly httpService: HttpService) {}
 
   async getDistanceNDuration(
-    pickup: LocationObject,
-    dropoff: LocationObject,
+    origin: LocationObject,
+    destination: LocationObject,
     type: VehicleType,
   ) {
-    const vehicle = type === VehicleType.BIKE ? 'motorcycle' : 'car';
+    const vehicle = type;
 
     const response = await firstValueFrom(
       this.httpService.get(
-        `/route?point=${pickup.coordinates[1]},${pickup.coordinates[0]}
-            &point=${dropoff.coordinates[1]},${dropoff.coordinates[0]}&vehicle=${vehicle}`,
+        `/Direction?origin=${origin.coordinates[1]},${origin.coordinates[0]}&destination=${destination.coordinates[1]},${destination.coordinates[0]}&vehicle=${vehicle}`,
       ),
     ).then((res) => res.data);
 
     return {
-      distance: response.paths[0].distance,
-      duration: response.paths[0].time,
+      distance: response.routes[0].legs[0].distance.value,
+      duration: response.routes[0].legs[0].duration.value,
     };
   }
 
   async getMultipleDistanceNDuration(
-    pickup: LocationObject,
-    dropoffs: LocationObject[],
+    origins: LocationObject[],
+    destinations: LocationObject[],
     type: VehicleType,
   ) {
-    const vehicle = type === VehicleType.BIKE ? 'motorcycle' : 'car';
-
-    const points = [
-      pickup.coordinates.reverse().join(','),
-      ...dropoffs.map((dropoff) => dropoff.coordinates.reverse().join(',')),
-    ];
-
-    const sources = dropoffs.map((_, index) => index + 1).join(';');
+    const vehicle = type;
 
     const url = this.buildMatrixUrl({
-      points,
-      sources,
-      destinations: '0',
+      origins,
+      destinations,
       vehicle,
-      apiVersion: '1.1',
     });
 
     const res = await firstValueFrom(this.httpService.get(url)).then(
       (res) => res.data,
     );
-    return {
-      distances: res.distances.flatMap((distance) => distance),
-      durations: res.durations.flatMap((duration) => duration),
-    };
+
+    return res.rows;
   }
 
   private buildMatrixUrl(config: {
-    points: string[];
-    sources: string;
-    destinations: string;
+    origins: LocationObject[];
+    destinations: LocationObject[];
     vehicle: string;
-    apiVersion: string;
   }) {
     const params = new URLSearchParams();
-    params.append('api-version', config.apiVersion);
-
-    config.points.forEach((point) => {
-      params.append('point', point);
-    });
-
-    params.append('sources', config.sources);
-    params.append('destinations', config.destinations);
-    params.append('points_encoded', 'false');
+    params.append(
+      'origins',
+      config.origins
+        .map((loc) => `${loc.coordinates[1]},${loc.coordinates[0]}`)
+        .join('|'),
+    );
+    params.append(
+      'destinations',
+      config.destinations
+        .map((loc) => `${loc.coordinates[1]},${loc.coordinates[0]}`)
+        .join('|'),
+    );
     params.append('vehicle', config.vehicle);
 
-    const paramsString = params
-      .toString()
-      .replace(/%2C/g, ',')
-      .replace(/%3D/g, '=')
-      .replace(/%3B/g, ';')
-      .replace(/%26/g, '&');
-    return `/matrix?${paramsString}`;
+    return `/DistanceMatrix?${params}`;
   }
 
   calculateFare(distance: number, type: DistanceFare): number {
