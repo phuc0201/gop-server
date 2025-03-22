@@ -123,99 +123,101 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
     return orders;
   }
 
-  async findOrderByCustomer(customer_id: string) {
-    const objectId = new ObjectId(customer_id);
+  async findOrdersByCustomer(
+    customer_id: string,
+    status: string,
+    searchValue: string,
+  ) {
+    const normalizeString = (str: string) =>
+      str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    const matchConditions: any = {
+      customer: customer_id,
+      deleted_at: null,
+    };
+
+    if (status !== '') {
+      matchConditions.order_status = status;
+    }
+
     const orders = await this.orderModel
-      .aggregate([
-        {
-          $match: {
-            customer: objectId,
-          },
-        },
-        {
-          $lookup: {
-            from: 'restaurants',
-            localField: 'restaurant',
-            foreignField: '_id',
-            as: 'restaurant',
-            pipeline: [
-              {
-                $project: {
-                  restaurant_name: 1,
-                  cover_image: 1,
-                  _id: 1,
-                },
-              },
-            ],
-          },
-        },
-        {
-          $unwind: '$restaurant',
-        },
-        {
-          $lookup: {
-            from: 'bills',
-            localField: 'bill',
-            foreignField: '_id',
-            as: 'bill',
-            pipeline: [
-              {
-                $project: {
-                  total: 1,
-                },
-              },
-            ],
-          },
-        },
-        {
-          $unwind: '$bill',
-        },
-        {
-          $unwind: '$items',
-        },
-        {
-          $lookup: {
-            from: 'fooditems',
-            localField: 'items.food_id',
-            foreignField: '_id',
-            as: 'items.foodDetails',
-            pipeline: [
-              {
-                $project: {
-                  name: 1,
-                  _id: 0,
-                },
-              },
-            ],
-          },
-        },
-        {
-          $unwind: '$items.foodDetails',
-        },
-        {
-          $group: {
-            _id: '$_id',
-            restaurant: { $first: '$restaurant' },
-            total: { $first: '$bill.total' },
-            billId: { $first: '$bill._id' },
-            items: {
-              $push: {
-                quantity: '$items.quantity',
-                food_name: '$items.foodDetails.name',
-              },
-            },
-            updatedAt: { $first: '$updatedAt' },
-          },
-        },
-        {
-          $sort: { updatedAt: -1 },
-        },
-      ])
+      .find(matchConditions)
+      .select(
+        `restaurant
+        bill
+        items 
+        delivery_location 
+        delivery_fare 
+        order_cost 
+        confirm_time 
+        complete_time 
+        order_time 
+        order_status
+        updatedAt`,
+      )
+      .sort({ updatedAt: -1 })
+      .lean()
       .exec();
-    return orders;
+    const billIds = orders.map((order) => order.bill?.toString() || '');
+
+    const uniqueItems = Array.from(
+      new Set(
+        orders.flatMap((order) =>
+          order.items.map((item) => item.food_id.toString()),
+        ),
+      ),
+    );
+
+    const restaurantIds = Array.from(
+      new Set(orders.map((order) => order.restaurant?.toString() || '')),
+    );
+
+    const [bills, foodDetails, restaurantsInfo] = await Promise.all([
+      this.paymentService.getBillsByIds(billIds),
+      this.restaurantService.getFoodImagesAndNames(uniqueItems),
+      this.restaurantService.getRestaurantInfoInOrders(restaurantIds),
+    ]);
+
+    const resWithSearchValue = restaurantsInfo.filter((res) =>
+      normalizeString(res.restaurant_name).includes(
+        normalizeString(searchValue),
+      ),
+    );
+
+    const ordersWithRes = orders.filter((order) =>
+      resWithSearchValue.some(
+        (res) => res._id.toString() === order.restaurant?.toString(),
+      ),
+    );
+
+    return ordersWithRes.map((orderItems) => {
+      return {
+        ...orderItems,
+        restaurant: restaurantsInfo.find(
+          (res) => res._id == orderItems.restaurant?.toString() || '',
+        ),
+        items: orderItems.items.map((item) => {
+          const food = foodDetails.find(
+            (food) => food._id.toString() == item.food_id,
+          );
+          return {
+            id: item.food_id,
+            quantity: item.quantity,
+            price: food?.price,
+            name: food?.name,
+            image: food?.image,
+          };
+        }),
+        bill: bills.find((bill) => bill.id == orderItems.bill),
+      };
+    });
   }
 
-  async findOrderByState(restaurant_id: string, state: OrderStatus) {
+  async findOrdersByState(restaurant_id: string, state: OrderStatus) {
     const objectId = new ObjectId(restaurant_id);
     const orders = await this.orderModel
       .aggregate([

@@ -45,7 +45,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     private readonly cuisineModel: Model<CuisineCategories>,
     private readonly restaurantCategoryService: RestaurantCategoryService,
     private readonly foodItemService: FoodItemService,
-    private readonly modifierGroupService: ModifierGroupService,
     private readonly modifierService: ModifierService,
     private vietmapService: VietMapService,
     private firebaseService: FirebaseService,
@@ -54,22 +53,19 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     super(restaurantModel);
   }
 
-  async getFoodItems(page: number, limit: number, category_id: string = '') {
-    let foods;
-    if (category_id === '') {
-      foods = await this.foodItemService.getFoodItems(page, limit);
-    } else {
-      const foodItems = await this.restaurantCategoryService.getFoodItems(
-        page,
-        limit,
-        category_id,
-      );
-      foods = foodItems[0]['food_items'];
-    }
-    return {
-      totalPage: 0,
-      foodItems: foods,
-    };
+  async getRestaurantInfoInOrders(resIDs: string[]) {
+    const restaurants = await this.restaurantModel
+      .find({
+        _id: { $in: resIDs },
+      })
+      .select('restaurant_name avatar status')
+      .lean()
+      .exec();
+    return restaurants;
+  }
+
+  getFoodImagesAndNames(iDs: string[]) {
+    return this.foodItemService.getFoodImagesAndNames(iDs);
   }
 
   async getReivewsByRes(resId: string) {
@@ -404,6 +400,13 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       ),
     ]);
 
+    // const [avgRatings, campaigns] = await Promise.all([
+    //   this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
+    //   this.campaignService.getCampaignsByRestaurantIds(
+    //     restaurants.map((res) => res.id),
+    //   ),
+    // ]);
+
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
         cmp.restaurant_id ? cmp.restaurant_id.toString() : null,
@@ -489,6 +492,11 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
       this.calculateRestaurantAverageRating(restaurantIds),
     ]);
+
+    // const [campaigns, avgRatings] = await Promise.all([
+    //   this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
+    //   this.calculateRestaurantAverageRating(restaurantIds),
+    // ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -633,33 +641,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     return cuisines;
   }
 
-  // async getInfoByCustomer(id: string, coordinates: number[]){
-  //   const restaurant = await this.restaurantModel.findById(id, {
-  //     balance: 0,
-  //     verified: 0,
-  //     deleted_at: 0,
-  //     email: 0,
-  //     password: 0,
-  //     refresh_token: 0,
-  //     full_name: 0,
-  //   }).lean();
-
-  //   const customerLocation = new LocationObject(coordinates, '');
-
-  //   const [{ distance, duration }, reviews] = await Promise.all([
-  //     this.vietmapService.getDistanceNDuration(restaurant.location, customerLocation, VehicleType.BIKE),
-  //     this.reviewModel.find({ reviewable_id: id })
-  //   ]);
-
-  //   const rating = reviews.reduce((total, curr) => {
-  //     return total + curr.rating;
-  //   }, 0)
-
-  //   return {
-  //     ...restaurant, distance, duration, rating: (reviews.length > 0 ? rating/reviews.length : 0)
-  //   }
-  // }
-
   async getInfo(id: string) {
     const restaurant = await this.findOneById(id);
     const { verified, email, full_name, ...restaurant_info } = (
@@ -667,138 +648,4 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     ).toJSON();
     return restaurant_info;
   }
-  // // async addCategory(id: string, dto: CreateRestaurantCategoryDto): Promise<RestaurantDocument> {
-  // //   const restaurant = await this.restaurantModel.findById(id).exec();
-  // //   for (const item of dto.food_items) {
-  // //     const newModifierGroup = new ModifierGroup(item.modifier_groups);
-  // //     const newModifier = new Modifier(item.modifier_groups);
-  // //     await this.modifieGroupModel.create(newModifierGroup);
-  // //     await this.modifierModel.create(newModifier);
-  // //   }
-  // //   const newCategories = await this.restaurantCategoryModel.create(dto);
-  // //   restaurant.restaurant_categories.push(newCategories);
-  // //   return restaurant.save();
-  // // }
-
-  // async updateRestaurant(id: string, dto: UpdateRestaurantDto): Promise<RestaurantDocument> {
-  //   const restaurant = await this.restaurantModel.findByIdAndUpdate(id, dto).exec();
-  //   return restaurant;
-  // }
-
-  // async updateRestaurantTier(id: string, tier: RestaurantTier): Promise<RestaurantDocument> {
-  //   const restaurant = await this.restaurantModel.findByIdAndUpdate(id, {tier:tier}).exec();
-  //   return restaurant;
-  // }
-
-  // async remove(id: string) {
-  //   return this.restaurantModel.findByIdAndDelete(id).exec();
-  // }
-
-  // async updateAvatar(id: string, avatar: Express.Multer.File) {
-  //   const restaurant = await this.restaurantModel.findById(id).exec();
-  //   if (!restaurant) {
-  //     throw new Error('Restaurant not found');
-  //   }
-  //   const avatarUrl = await this.azureStorage.uploadFile(avatar, 'restaurant-avatar', restaurant._id);
-  //   restaurant.avatar = avatarUrl;
-  //   return restaurant.save();
-  // }
-
-  // //todo update cover image
-  // async updateCover(id: string, cover: Express.Multer.File) {
-  //   const restaurant = await this.restaurantModel.findById(id).exec();
-  //   if (!restaurant) {
-  //     throw new Error('Restaurant not found');
-  //   }
-  //   const coverUrl = await this.azureStorage.uploadFile(cover, 'restaurant-cover-img', restaurant._id);
-  //   restaurant.cover_image = coverUrl;
-  //   return restaurant.save();
-  // }
-
-  // //todo update item image
-  // async updateItemImg(id: string, item_id: string, img: Express.Multer.File) {
-  //   const imgURL = await this.azureStorage.uploadFile(img, 'restaurant-item-img', id);
-  // }
-
-  // async updateFoodItemImage(id: string, img: Express.Multer.File){
-  //   const foodItem = await this.foodItemModel.findById(id).exec();
-  //   if (!foodItem) {
-  //     throw new Error('Food item not found');
-  //   }
-  //   // const foodImg = await this.azureStorage.uploadFile(img, 'restaurant-food-items', foodItem.id);
-  //   // foodItem.image = foodImg;
-  //   // return foodItem.save();
-  //   return;
-  // }
-
-  // async fetchRestaurantMenu(restaurant_id: string) {
-  //   const restaurant = await this.restaurantModel.findById(restaurant_id).exec();
-
-  //   const restaurantMenu = restaurant.restaurant_categories.map(async (cate_id) => {
-  //     const restaurant_category = await this.restaurantCategoryModel.findById(cate_id).exec();
-
-  //     const foodItems = await Promise.all( restaurant_category.food_items.map(async (item_id) => {
-  //       let food_item = await this.foodItemModel.findById(item_id).exec();
-
-  //       const modifier_groups = await Promise.all(food_item.modifier_groups.map(async (modifierGr_id) => {
-  //         const modifier_group = await this.modifieGroupModel.findById(modifierGr_id).exec()
-  //         const modifiers = await Promise.all(modifier_group.modifier.map(async (modifier_id) => await this.modifierModel.findById(modifier_id)))
-
-  //         return { ...modifier_group.toObject(), modifier: modifiers }
-  //       }))
-
-  //       return { ...food_item.toObject(), modifier_groups: modifier_groups };
-  //     }))
-
-  //     return {...restaurant_category.toObject(), food_items: foodItems};
-  //   });
-
-  //   const menu = await Promise.all(restaurantMenu);
-  //   return menu;
-  // }
-
-  // async createFoodItem(id: string, foodItem: CreateFoodItemDto, img: Express.Multer.File): Promise<FoodItemDocument>{
-  //   const restaurant = await this.restaurantModel.findById(id).exec();
-  //   if (!restaurant) {
-  //     throw new Error('Restaurant not found');
-  //   }
-
-  //   const restaurantCategory = await this.restaurantCategoryModel.findById(foodItem.category_id).exec();
-  //   if (!restaurantCategory) {
-  //     throw new Error('Restaurant category not found');
-  //   }
-  //   const newFoodItem = new this.foodItemModel(foodItem);
-  //   newFoodItem.modifier_groups = []
-  //   if(newFoodItem){
-  //     newFoodItem.image = '';
-  //     if(img){
-  //       const foodImg = await this.azureStorage.uploadFile(img, 'restaurant-food-items', newFoodItem.id);
-  //       if(!foodImg){
-  //         throw new Error('Upload image failed');
-  //       }
-  //       newFoodItem.image = foodImg;
-  //     }
-  //     restaurantCategory.food_items.push(newFoodItem.id)
-  //     if('modifier_groups' in foodItem){
-  //       for(const modifierGr of foodItem.modifier_groups) {
-  //         const mGr = new this.modifieGroupModel(modifierGr)
-  //         mGr.modifier = []
-  //         if(mGr){
-  //           newFoodItem.modifier_groups.push(mGr.id)
-  //           for (const md of modifierGr.modifier) {
-  //             const modifier = new this.modifierModel(md);
-  //             await modifier.save();
-  //             mGr.modifier.push(modifier.id);
-  //           }
-  //           await mGr.save();
-  //         }
-  //       }
-  //     }
-  //     await restaurantCategory.save();
-  //     return newFoodItem.save();
-  //   }
-  //   else{
-  //     throw new Error('Create food item failed')
-  //   }
-  // }
 }

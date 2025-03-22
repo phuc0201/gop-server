@@ -11,6 +11,7 @@ import {
   Res,
   Logger,
   BadRequestException,
+  Query,
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
@@ -31,7 +32,7 @@ import { CancelOrderDto } from './dto/cancel-order.dto';
 import { TransportOrderType } from './entities/transport_order.schema';
 import { DeliveryOrderType } from './entities/delivery_order.schema';
 import { DriverService } from 'src/driver/driver.service';
-import { Response } from 'express';
+import { query, Response } from 'express';
 import { CreateDeliveryOrderDto } from './dto/create-delivery-order';
 
 @ApiBearerAuth()
@@ -155,9 +156,16 @@ export class OrderController {
   // todo update DTO
   @Roles(RoleType.CUSTOMER)
   @Get('customer/history')
-  async orderHistoryCustomer(@Req() req: RequestWithUser) {
+  async orderHistoryCustomer(
+    @Req() req: RequestWithUser,
+    @Query() query: { status: string; searchValue: string },
+  ) {
     try {
-      const orders = await this.orderService.findOrderByCustomer(req.user.sub);
+      const orders = await this.orderService.findOrdersByCustomer(
+        req.user.sub,
+        query.status,
+        query.searchValue,
+      );
       return orders;
     } catch (e) {
       throw new InternalServerErrorException(e);
@@ -451,7 +459,7 @@ export class OrderController {
   @Get('state/pending-confirm')
   OrderPendingByRestaurant(@Req() req: RequestWithUser) {
     try {
-      const orders = this.orderService.findOrderByState(
+      const orders = this.orderService.findOrdersByState(
         req.user.sub,
         OrderStatus.PENDING_CONFIRM,
       );
@@ -465,7 +473,7 @@ export class OrderController {
   @Get('state/progressing')
   OrderProgressingByRestaurant(@Req() req: RequestWithUser) {
     try {
-      const orders = this.orderService.findOrderByState(
+      const orders = this.orderService.findOrdersByState(
         req.user.sub,
         OrderStatus.PROGRESSING,
       );
@@ -479,7 +487,7 @@ export class OrderController {
   @Get('state/completed')
   OrderCompletedByRestaurant(@Req() req: RequestWithUser) {
     try {
-      const orders = this.orderService.findOrderByState(
+      const orders = this.orderService.findOrdersByState(
         req.user.sub,
         OrderStatus.COMPLETED,
       );
@@ -493,7 +501,7 @@ export class OrderController {
   @Get('state/cancelled')
   OrderCancelledByRestaurant(@Req() req: RequestWithUser) {
     try {
-      const orders = this.orderService.findOrderByState(
+      const orders = this.orderService.findOrdersByState(
         req.user.sub,
         OrderStatus.CANCELLED,
       );
