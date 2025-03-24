@@ -9,6 +9,7 @@ import {
   DistanceFare,
   OrderStatus,
   OrderType,
+  PaymentMethod,
   RestaurantStatus,
   VehicleType,
 } from 'src/utils/enums';
@@ -483,28 +484,6 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
     return new_transport_order.toObject();
   }
 
-  // async TransportOrderPlace_Cash(dto: CreateTransportOrderDto, customer_id: string ): Promise<TransportOrderType> {
-
-  //     const new_dto = {...dto, order_status: OrderStatus.ALLOCATING, customer: customer_id, order_time: new Date(Date.now()+7*60*60*1000),};
-  //     let new_transport_order = new this.transportOrderModel(new_dto);
-
-  //     Object.assign(new_transport_order, await this.vietMapService.getDistanceNDuration(dto.pickup_location, dto.dropoff_location, dto.vehicle_type));
-
-  //     if(dto.vehicle_type == VehicleType.CAR){
-  //         new_transport_order.trip_fare = this.calculateFare(new_transport_order.distance, CarFare);
-  //     } else {
-  //         new_transport_order.trip_fare = this.calculateFare(new_transport_order.distance , BikeFare);
-  //     }
-
-  //     const bill = await this.paymentService.createBill({
-  //         payment_method: PaymentMethod.CASH,
-  //         order: new_transport_order,
-  //     });
-  //     new_transport_order.bill = bill;
-
-  //     return (await new_transport_order.save()).toObject();
-  // }
-
   async DeliveryOrderQuote(dto: CreateDeliveryOrderDto, customer_id: string) {
     const restaurant_location =
       await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
@@ -605,39 +584,36 @@ export class OrderService extends BaseServiceAbstract<OrderDetails> {
     };
   }
 
-  // async fetchOrderTrackingInfo(orderId: string) {
-  //   const order = await this.orderModel.findById({
-  //     id: orderId,
-  //   });
+  async reOrder(orderId: string, customerId: string) {
+    const order = await this.orderModel.findById(orderId);
 
-  //   return order;
-  // }
+    if (!order && order.customer.toString() !== customerId) return;
 
-  // async trackingDeliveryOrder(orderId: string) {
-  //   const order = await this.orderModel.findById(orderId);
-  //   return order.order_status;
-  // }
+    const [itemsAvailable, restaurant] = await Promise.all([
+      this.restaurantService.checkRestaurantAndFoodAvailability(
+        order.restaurant.toString(),
+        order.items,
+      ),
+      this.restaurantService.getRestaurantInfoInOrder(
+        order.restaurant.toString(),
+      ),
+    ]);
 
-  // async DeliveryOrderPlace_Cash(dto: CreateDeliveryOrderDto, customer_id: string): Promise<DeliveryOrderType> {
-  //     const restaurant_location = await this.restaurantService.getRestaurantLocation(dto.restaurant_id);
-  //     const new_order = new this.deliveryOrderModel(dto);
+    const newOrder = {
+      restaurant_id: order.restaurant.toString(),
+      restaurant_name: restaurant.restaurant_name,
+      retaurant_location: restaurant.location.coordinates,
+      campaign_ids: [],
+      delivery_location: order.delivery_location,
+      items: itemsAvailable.items,
+      phone: order.phone,
+      payment_method: PaymentMethod.COD,
+    };
 
-  //     Object.assign(new_order, await this.vietMapService.getDistanceNDuration(restaurant_location, dto.delivery_location, VehicleType.BIKE));
+    if (itemsAvailable.items.length === 0) return;
 
-  //     new_order.delivery_fare = this.calculateFare(new_order.distance, BikeFare);
-  //     for (let item of dto.items){
-  //         new_order.order_cost += await this.restaurantService.food_calculateFare(item)
-  //     }
-
-  //     const bill = await this.paymentService.createBill({
-  //         payment_method: PaymentMethod.CASH,
-  //         campaign_id: dto.campaign_ids,
-  //         order: new_order,
-  //     });
-  //     new_order.bill = bill;
-
-  //     return (await new_order.save()).toObject();
-  // }
+    return newOrder;
+  }
 
   async cancelOrder(payload: CancelOrderDto) {
     const order = await this.findOneByCondition({

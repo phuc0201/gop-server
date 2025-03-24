@@ -29,11 +29,9 @@ import { RestaurantCategory } from './entities/restaurant_category.schema';
 import { Review } from './entities/review.schema';
 import { FoodItemService } from './food_item.service';
 import { ModifierService } from './modifier.service';
-import { ModifierGroupService } from './modifier_groups.service';
 import { RestaurantCategoryService } from './restaurant_category.service';
-import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
 import { CampaignService } from 'src/campaign/campaign.service';
-import { OrderService } from 'src/order/order.service';
+import { Modifier } from './entities/modifier.schema';
 
 @Injectable()
 export class RestaurantService extends AccountServiceAbstract<Restaurant> {
@@ -53,12 +51,76 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     super(restaurantModel);
   }
 
+  async checkRestaurantAndFoodAvailability(
+    restaurantId: string,
+    foodItems: OrderFoodItems[],
+  ): Promise<{
+    isRestaurantOpen: boolean;
+    items: {
+      food_id: string;
+      food_name: string;
+      image: string;
+      price: number;
+      quantity: number;
+      modifiers: Modifier[];
+    }[];
+  }> {
+    const restaurant = await this.findOneById(restaurantId);
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
+    const isRestaurantOpen = restaurant.status !== RestaurantStatus.CLOSED;
+
+    const availableFoods = await Promise.all(
+      foodItems.map(async (item) => {
+        const food = await this.foodItemService.findOneById(item.food_id);
+
+        if (!food) {
+          return null;
+        }
+
+        const availableModifiers = await Promise.all(
+          item.modifiers.map(async (modifierId) => {
+            const modifierExists =
+              await this.modifierService.findOneById(modifierId);
+            return modifierExists ? modifierExists : null;
+          }),
+        );
+
+        return {
+          food_id: item.food_id,
+          food_name: food.name,
+          image: food.image,
+          quantity: item.quantity,
+          price: food.price,
+          modifiers: availableModifiers.filter((mod) => mod !== null),
+        };
+      }),
+    );
+
+    return {
+      isRestaurantOpen,
+      items: availableFoods.filter((food) => food !== null),
+    };
+  }
+
   async getRestaurantInfoInOrders(resIDs: string[]) {
     const restaurants = await this.restaurantModel
       .find({
         _id: { $in: resIDs },
       })
-      .select('restaurant_name avatar status')
+      .select('restaurant_name avatar status location')
+      .lean()
+      .exec();
+    return restaurants;
+  }
+
+  async getRestaurantInfoInOrder(resIDs: string) {
+    const restaurants = await this.restaurantModel
+      .findById(resIDs)
+      .select('restaurant_name avatar status location')
       .lean()
       .exec();
     return restaurants;

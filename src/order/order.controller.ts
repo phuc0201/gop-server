@@ -84,24 +84,6 @@ export class OrderController {
     this.socketGateway.notifyOrderState(payload._id, status);
   }
 
-  //**  CUSTOMER  **/
-  // @Roles(RoleType.CUSTOMER)
-  // @Post('create/transport')
-  // async placeTransportOrder(@Body() createOrderDto: CreateTransportOrderDto,@Req() req: RequestWithUser): Promise<any> {
-  //   try {
-  //     if (createOrderDto.payment_method == PaymentMethod.CASH) {
-  //       const order = await this.orderService.TransportOrderPlace_Cash(createOrderDto, req.user.sub)
-  //        this.handleTransportOrderAssignmentEvent(order);
-  //       return order;
-  //     } else {
-  //       return 'Payment method not supported'
-  //     }
-  //   } catch (e) {
-  //     this.logger.error(e)
-  //     throw e
-  //   }
-  // }
-
   @Post('quote/transport')
   async quoteTransportOrder(
     @Body() createOrderDto: CreateTransportOrderDto,
@@ -153,7 +135,22 @@ export class OrderController {
     }
   }
 
-  // todo update DTO
+  @Get('customer/re-order')
+  async reOrder(
+    @Req() req: RequestWithUser,
+    @Query() query: { orderId: string },
+  ) {
+    try {
+      const order = await this.orderService.reOrder(
+        query.orderId,
+        req.user.sub,
+      );
+      return order;
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
+
   @Roles(RoleType.CUSTOMER)
   @Get('customer/history')
   async orderHistoryCustomer(
