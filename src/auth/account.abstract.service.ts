@@ -1,46 +1,55 @@
-import { Account } from "./entities/account.schema";
-import { FilterQuery, Model, QueryOptions } from "mongoose";
-import { BaseServiceAbstract } from "src/utils/repository/base.service";
-import { CreateAccountDto } from "./dto";
-import * as argon2 from 'argon2'
-import { ConflictException } from "@nestjs/common";
+import { Account } from './entities/account.schema';
+import { FilterQuery, Model, QueryOptions } from 'mongoose';
+import { BaseServiceAbstract } from 'src/utils/repository/base.service';
+import { CreateAccountDto } from './dto';
+import * as argon2 from 'argon2';
+import { ConflictException } from '@nestjs/common';
 
-export abstract class AccountServiceAbstract <T extends Account> extends BaseServiceAbstract<T>{
-  protected constructor(
-      model: Model<T>
-  ) {
-      super(model);
+export abstract class AccountServiceAbstract<
+  T extends Account,
+> extends BaseServiceAbstract<T> {
+  protected constructor(model: Model<T>) {
+    super(model);
   }
 
-  
-  public get name() : string {
+  public get name(): string {
     return this.constructor.name;
   }
-  
 
-  async signUp<T extends CreateAccountDto>(dto: T) {
-      let account = await this.findOneByCondition({
-          $or: [{ email: dto.email }, { phone: dto.phone }],
-      });
-      if (account) 
-          return null;
+  async signInWithGoogle<T extends CreateAccountDto>(dto: T) {
+    let account = await this.findOneByCondition({
+      email: dto.email,
+    });
+    if (account) return account;
 
-      dto.password = await argon2.hash(dto.password);
-
-      return this.create(dto);
+    return await this.create(dto);
   }
 
-  async signIn(email: string, password: string): Promise<{code : string, data: Account}>{
+  async signUp<T extends CreateAccountDto>(dto: T) {
+    let account = await this.findOneByCondition({
+      $or: [{ email: dto.email }, { phone: dto.phone }],
+    });
+    if (account) return null;
+
+    dto.password = await argon2.hash(dto.password);
+
+    return this.create(dto);
+  }
+
+  async signIn(
+    email: string,
+    password: string,
+  ): Promise<{ code: string; data: Account }> {
     let msg = {
       code: '0',
-      data: null
-    } // success
-    msg.data = await this.findOneByCondition({email: email});
+      data: null,
+    }; // success
+    msg.data = await this.findOneByCondition({ email: email });
     if (!msg.data) {
       msg.code = '2'; // wrong email or password
       return msg;
     }
-    if (!await argon2.verify(msg.data.password, password)) {
+    if (!(await argon2.verify(msg.data.password, password))) {
       msg.code = '2'; // wrong email or password
       return msg;
     }
@@ -56,16 +65,16 @@ export abstract class AccountServiceAbstract <T extends Account> extends BaseSer
   }
 
   async updateVerified(id: string) {
-    await this.update(id, {verified: true} as Partial<T>);
+    await this.update(id, { verified: true } as Partial<T>);
   }
 
   async resetPassword(id: string, password: string) {
     const hash = await argon2.hash(password);
-    await this.update(id, {password: hash}as Partial<T>);
+    await this.update(id, { password: hash } as Partial<T>);
   }
 
   async topUp(id: string, amount: number) {
-    this.model.updateOne({_id: id}, {$inc: {balance: amount}});
+    this.model.updateOne({ _id: id }, { $inc: { balance: amount } });
   }
 
   async withdraw(id: string, amount: number) {
@@ -73,7 +82,6 @@ export abstract class AccountServiceAbstract <T extends Account> extends BaseSer
     if (account.balance < amount) {
       throw new ConflictException('Not enough balance');
     }
-    this.model.updateOne({_id: id}, {$inc: {balance: -amount}});
+    this.model.updateOne({ _id: id }, { $inc: { balance: -amount } });
   }
-
 }

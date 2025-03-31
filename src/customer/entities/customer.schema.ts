@@ -1,20 +1,19 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { HydratedDocument } from "mongoose";
-import { Account } from "src/auth/entities/account.schema";
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument } from 'mongoose';
+import { Account } from 'src/auth/entities/account.schema';
 
-export type CustomerDocument = HydratedDocument<Customer>
+export type CustomerDocument = HydratedDocument<Customer>;
 
 @Schema()
-export class Customer extends Account{
+export class Customer extends Account {
+  @Prop({ default: '' })
+  address: string;
 
-    @Prop({ default: 'số 1 VVN, Linh Chiểu, Thủ Đức, TP.HCM' })
-    address: string
+  @Prop({ default: true })
+  gender: boolean; //* male: true
 
-    @Prop({ default: true })
-    gender: boolean //* male: true
-
-    @Prop({ default: '' })
-    avatar: string
+  @Prop({ default: '' })
+  avatar: string;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

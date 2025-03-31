@@ -3,21 +3,11 @@ import {
   Get,
   Post,
   Body,
-  Patch,
-  Param,
-  Delete,
-  ConflictException,
-  InternalServerErrorException,
-  BadRequestException,
   Req,
   UseGuards,
   Logger,
-  UnauthorizedException,
   Res,
-  HttpCode,
   HttpStatus,
-  ForbiddenException,
-  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -28,26 +18,14 @@ import { OTPType, OTPVerifyStatus, RoleType } from 'src/utils/enums';
 import { CreateAccountDto, OtpVerifyDto, SigninDto } from './dto';
 import { RequestWithUser } from 'src/utils/interfaces';
 import { AuthGuard } from '@nestjs/passport';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiParam,
-  ApiTags,
-  getSchemaPath,
-} from '@nestjs/swagger';
-import { MailerService } from '@nestjs-modules/mailer';
-import { OtpTemplate } from 'src/utils/mail-template/otp';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CreateDriverDto } from 'src/driver/dto/create-driver.dto';
 import { CreateRestaurantDto } from 'src/restaurant/dto/create-restaurant.dto';
 import { createCustomerDto } from 'src/customer/dto/create-customer.dto';
-import { log, profile } from 'console';
-import { PaymentService } from 'src/payment/payment.service';
 import { AccountServiceAbstract } from './account.abstract.service';
-import { Customer } from 'src/customer/entities/customer.schema';
 import { Account } from './entities/account.schema';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { ForgotPasswordRequestDto } from './dto/forgot-req.dto';
+import { FirebaseService } from 'src/utils/firebase/firebase.service';
 
 @ApiBearerAuth()
 @ApiTags('Authentications')
@@ -58,7 +36,7 @@ export class AuthController {
     private readonly customerService: CustomerService,
     private readonly driverService: DriverService,
     private readonly restaurantService: RestaurantService,
-    private readonly paymentService: PaymentService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   logger = new Logger('AuthController');
@@ -85,6 +63,32 @@ export class AuthController {
           .status(HttpStatus.INTERNAL_SERVER_ERROR)
           .json({ message: err.message });
       });
+  }
+
+  @Post('customer/google-login')
+  async googleLogin(@Body('token') token: string, @Res() res: Response) {
+    try {
+      const decodedToken = await this.firebaseService.verifyToken(token);
+      const { email, name, picture } = decodedToken;
+
+      const dto: CreateAccountDto = {
+        email: email,
+        full_name: name,
+        avatar: picture,
+      };
+      this.customerService.signInWithGoogle(dto).then(async (account) => {
+        const token = await this.accountService.getTokens(
+          account._id,
+          this.customerService.name,
+        );
+        this.customerService.updateToken(account._id, token.refreshToken);
+        return res.status(HttpStatus.OK).json(token);
+      });
+    } catch (error) {
+      return res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: error.message });
+    }
   }
 
   @Post('customer/signup')

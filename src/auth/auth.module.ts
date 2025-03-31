@@ -10,25 +10,21 @@ import { AccessTokenStrategy } from './strategies/accessToken.strategy';
 import { RefreshTokenStrategy } from './strategies/refreshToken.strategy';
 import { Otp, OtpSchema } from './entities/otp.schema';
 import { PaymentModule } from 'src/payment/payment.module';
-
+import { FirebaseModule } from 'src/utils/firebase/firebase.module';
+import { Account } from './entities/account.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Otp.name, schema: OtpSchema,}
-    ]),
+    MongooseModule.forFeature([{ name: Otp.name, schema: OtpSchema }]),
     JwtModule.register({}),
     CustomerModule,
     DriverModule,
     RestaurantModule,
-    PaymentModule
+    PaymentModule,
+    FirebaseModule,
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    AccessTokenStrategy,
-    RefreshTokenStrategy, 
-  ],
+  providers: [AuthService, AccessTokenStrategy, RefreshTokenStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

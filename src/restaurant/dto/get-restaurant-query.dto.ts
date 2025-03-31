@@ -14,7 +14,7 @@ export class GetRestaurantsQueryDto {
   @IsString()
   searchQuery?: string;
 
-  cuisineId?: string;
+  cuisineSlug?: string;
 
   @IsOptional()
   page?: string;
