@@ -507,7 +507,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     page: number = 1,
     limit: number = 10,
     searchQuery: string = '',
-    cuisineId: string = '',
+    cuisineSlug: string = '',
     sortby: string = 'recommended',
     promo: boolean = false,
     bestOverall: boolean = false,
@@ -515,12 +515,16 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     deliveryFee: number = -1,
   ) {
     let matchConditions: any = {};
-
-    if (cuisineId) {
-      if (!Types.ObjectId.isValid(cuisineId)) {
-        throw new BadRequestException('Invalid category ID');
+    if (cuisineSlug !== '') {
+      const cuisine = await this.cuisineModel.findOne({
+        slug: cuisineSlug,
+      });
+      if (cuisine.id) {
+        if (!Types.ObjectId.isValid(cuisine.id)) {
+          throw new BadRequestException('Invalid category ID');
+        }
+        matchConditions.cuisine_categories = new Types.ObjectId(cuisine.id);
       }
-      matchConditions.cuisine_categories = new Types.ObjectId(cuisineId);
     }
 
     if (searchQuery) {
