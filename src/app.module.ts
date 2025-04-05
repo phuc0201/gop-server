@@ -15,6 +15,7 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { SocketModule } from './socket/socket.module';
 import { VietMapModule } from './utils/map-api/viet-map.module';
 import { CampaignModule } from './campaign/campaign.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 
 @Module({
@@ -64,6 +65,7 @@ import { CampaignModule } from './campaign/campaign.module';
     SocketModule,
     VietMapModule,
     CampaignModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [],

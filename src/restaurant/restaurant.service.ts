@@ -50,6 +50,196 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   ) {
     super(restaurantModel);
   }
+  async getAllMenusWithRestaurantInfo(userCoords: [number, number]) {
+    return await this.restaurantModel.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: 'Point',
+            coordinates: userCoords,
+          },
+          distanceField: 'distance',
+          spherical: true,
+          maxDistance: 20000, // 20km in meters
+        },
+      },
+      {
+        $match: {
+          deleted: null,
+        },
+      },
+      {
+        $lookup: {
+          from: 'reviews',
+          localField: '_id',
+          foreignField: 'reviewable_id',
+          as: 'reviews',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          rating: {
+            $ifNull: [{ $avg: '$reviews.rating' }, 0],
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'campaigns',
+          localField: '_id',
+          foreignField: 'restaurant_id',
+          as: 'campaigns',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: 'restaurantcategories',
+          localField: 'restaurant_categories',
+          foreignField: '_id',
+          as: 'restaurant_categories',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: 'fooditems',
+          localField: 'restaurant_categories.food_items',
+          foreignField: '_id',
+          as: 'foodItems',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: 'modifiergroups',
+          localField: 'foodItems.modifier_groups',
+          foreignField: '_id',
+          as: 'modifierGroups',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: 'modifiers',
+          localField: 'modifierGroups.modifier',
+          foreignField: '_id',
+          as: 'modifiers',
+          pipeline: [
+            {
+              $match: {
+                deleted: null,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          hasCampaign: { $gt: [{ $size: '$campaigns' }, 0] },
+          foodItems: {
+            $map: {
+              input: '$foodItems',
+              as: 'foodItem',
+              in: {
+                id: '$$foodItem._id',
+                name: '$$foodItem.name',
+                price: '$$foodItem.price',
+                image: '$$foodItem.image',
+                modifier_groups: {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: '$modifierGroups',
+                        as: 'mg',
+                        cond: {
+                          $in: ['$$mg._id', '$$foodItem.modifier_groups'],
+                        },
+                      },
+                    },
+                    as: 'mg',
+                    in: {
+                      id: '$$mg._id',
+                      name: '$$mg.name',
+                      min: '$$mg.min',
+                      max: '$$mg.max',
+                      modifier: {
+                        $filter: {
+                          input: '$modifiers',
+                          as: 'mod',
+                          cond: {
+                            $in: ['$$mod._id', '$$mg.modifier'],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          status: 1,
+          restaurant_name: 1,
+          location: 1,
+          avatar: 1,
+          distance: 1,
+          rating: 1,
+          hasCampaign: 1,
+          foodItems: {
+            id: 1,
+            name: 1,
+            price: 1,
+            image: 1,
+            modifier_groups: {
+              id: '$_id',
+              name: 1,
+              min: 1,
+              max: 1,
+              modifier: {
+                name: 1,
+                price: 1,
+              },
+            },
+          },
+        },
+      },
+    ]);
+  }
 
   async checkRestaurantAndFoodAvailability(
     restaurantId: string,
@@ -450,24 +640,24 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       return [];
     }
 
-    const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
-      this.vietmapService.getMultipleDistanceNDuration(
-        restaurants.map((res) => res.location),
-        [customerLocation],
-        VehicleType.BIKE,
-      ),
-      this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
-      this.campaignService.getCampaignsByRestaurantIds(
-        restaurants.map((res) => res.id),
-      ),
-    ]);
-
-    // const [avgRatings, campaigns] = await Promise.all([
+    // const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
+    //   this.vietmapService.getMultipleDistanceNDuration(
+    //     restaurants.map((res) => res.location),
+    //     [customerLocation],
+    //     VehicleType.BIKE,
+    //   ),
     //   this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
     //   this.campaignService.getCampaignsByRestaurantIds(
     //     restaurants.map((res) => res.id),
     //   ),
     // ]);
+
+    const [avgRatings, campaigns] = await Promise.all([
+      this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
+      this.campaignService.getCampaignsByRestaurantIds(
+        restaurants.map((res) => res.id),
+      ),
+    ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -490,8 +680,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             (cat: any) => cat.name,
           ),
           isClosed: res.status === RestaurantStatus.CLOSED,
-          distance: distancesAndDurations[index].elements[0].distance.value,
-          duration: distancesAndDurations[index].elements[0].duration.value,
+          distance: 0,
+          duration: 0,
           hasCampaign: hasCmp,
         };
       })
@@ -549,20 +739,20 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const locations = restaurants.map((res) => res.location);
     const customerLocation = new LocationObject(coordinates, '');
 
-    const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
-      this.vietmapService.getMultipleDistanceNDuration(
-        locations,
-        [customerLocation],
-        VehicleType.BIKE,
-      ),
-      this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
-      this.calculateRestaurantAverageRating(restaurantIds),
-    ]);
-
-    // const [campaigns, avgRatings] = await Promise.all([
+    // const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
+    //   this.vietmapService.getMultipleDistanceNDuration(
+    //     locations,
+    //     [customerLocation],
+    //     VehicleType.BIKE,
+    //   ),
     //   this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
     //   this.calculateRestaurantAverageRating(restaurantIds),
     // ]);
+
+    const [campaigns, avgRatings] = await Promise.all([
+      this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
+      this.calculateRestaurantAverageRating(restaurantIds),
+    ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -581,8 +771,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         return {
           ...newRes,
           cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
-          distance: distancesAndDurations[index].elements[0].distance.value,
-          duration: distancesAndDurations[index].elements[0].duration.value,
+          distance: 0,
+          duration: 0,
           hasCampaign: hasCmp,
           rating: review ? review.averageRating : 0,
         };

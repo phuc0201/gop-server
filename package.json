@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@azure/storage-blob": "^12.17.0",
+    "@google/genai": "^0.7.0",
     "@nestjs-modules/mailer": "^1.10.3",
     "@nestjs/axios": "^3.0.2",
     "@nestjs/common": "^10.0.0",
@@ -33,6 +34,7 @@
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/platform-socket.io": "^10.3.7",
+    "@nestjs/schedule": "^5.0.1",
     "@nestjs/swagger": "^7.1.17",
     "@nestjs/websockets": "^10.3.7",
     "@types/crypto-js": "^4.2.2",

@@ -40,7 +40,7 @@ export class Order extends BaseEntity {
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Customer' })
   customer: Customer;
 
-  @Prop({})
+  @Prop({ required: true })
   phone: string;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'Driver' })
