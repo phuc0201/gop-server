@@ -640,24 +640,24 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       return [];
     }
 
-    // const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
-    //   this.vietmapService.getMultipleDistanceNDuration(
-    //     restaurants.map((res) => res.location),
-    //     [customerLocation],
-    //     VehicleType.BIKE,
-    //   ),
-    //   this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
-    //   this.campaignService.getCampaignsByRestaurantIds(
-    //     restaurants.map((res) => res.id),
-    //   ),
-    // ]);
-
-    const [avgRatings, campaigns] = await Promise.all([
+    const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
+      this.vietmapService.getMultipleDistanceNDuration(
+        restaurants.map((res) => res.location),
+        [customerLocation],
+        VehicleType.BIKE,
+      ),
       this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
       this.campaignService.getCampaignsByRestaurantIds(
         restaurants.map((res) => res.id),
       ),
     ]);
+
+    // const [avgRatings, campaigns] = await Promise.all([
+    //   this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
+    //   this.campaignService.getCampaignsByRestaurantIds(
+    //     restaurants.map((res) => res.id),
+    //   ),
+    // ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -680,8 +680,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             (cat: any) => cat.name,
           ),
           isClosed: res.status === RestaurantStatus.CLOSED,
-          distance: 0,
-          duration: 0,
+          distance: distancesAndDurations[index].elements[0].distance.value,
+          duration: distancesAndDurations[index].elements[0].duration.value,
           hasCampaign: hasCmp,
         };
       })
@@ -739,20 +739,20 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const locations = restaurants.map((res) => res.location);
     const customerLocation = new LocationObject(coordinates, '');
 
-    // const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
-    //   this.vietmapService.getMultipleDistanceNDuration(
-    //     locations,
-    //     [customerLocation],
-    //     VehicleType.BIKE,
-    //   ),
-    //   this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
-    //   this.calculateRestaurantAverageRating(restaurantIds),
-    // ]);
-
-    const [campaigns, avgRatings] = await Promise.all([
+    const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
+      this.vietmapService.getMultipleDistanceNDuration(
+        locations,
+        [customerLocation],
+        VehicleType.BIKE,
+      ),
       this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
       this.calculateRestaurantAverageRating(restaurantIds),
     ]);
+
+    // const [campaigns, avgRatings] = await Promise.all([
+    //   this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
+    //   this.calculateRestaurantAverageRating(restaurantIds),
+    // ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -771,8 +771,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         return {
           ...newRes,
           cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
-          distance: 0,
-          duration: 0,
+          distance: distancesAndDurations[index].elements[0].distance.value,
+          duration: distancesAndDurations[index].elements[0].duration.value,
           hasCampaign: hasCmp,
           rating: review ? review.averageRating : 0,
         };
