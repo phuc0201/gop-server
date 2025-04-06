@@ -32,6 +32,7 @@ import { PaymentService } from 'src/payment/payment.service';
 import { ReviewDto } from './dto/review.dto';
 import { GetRestaurantsQueryDto } from './dto/get-restaurant-query.dto';
 import { CampaignService } from 'src/campaign/campaign.service';
+import { ConfigService } from '@nestjs/config';
 
 @ApiBearerAuth()
 @ApiTags('Restaurants')
@@ -40,7 +41,94 @@ export class RestaurantController {
   constructor(
     private readonly restaurantService: RestaurantService,
     private readonly campainService: CampaignService,
+    private readonly configService: ConfigService,
   ) {}
+
+  @Post('create')
+  async createMenus(
+    @Body() body: { restaurant_id: string; restaurantIdOnBe: string },
+  ) {
+    try {
+      const myHeaders = new Headers();
+      myHeaders.append('Content-Type', 'application/json');
+      myHeaders.append(
+        'Authorization',
+        this.configService.get<string>('BEFOOD_TOKEN'),
+      );
+      const raw = JSON.stringify({
+        restaurant_id: body.restaurantIdOnBe,
+        locale: 'vi',
+        app_version: '11269',
+        version: '1.1.269',
+        device_type: 3,
+        operator_token: '0b28e008bc323838f5ec84f718ef11e6',
+        customer_package_name: 'xyz.be.food',
+        device_token: '99d149899c4f2f3d79df1f8e73f539ef',
+        ad_id: '',
+        screen_width: 360,
+        screen_height: 640,
+        client_info: {
+          locale: 'vi',
+          app_version: '11269',
+          version: '1.1.269',
+          device_type: 3,
+          operator_token: '0b28e008bc323838f5ec84f718ef11e6',
+          customer_package_name: 'xyz.be.food',
+          device_token: '99d149899c4f2f3d79df1f8e73f539ef',
+          ad_id: '',
+          screen_width: 360,
+          screen_height: 640,
+        },
+        latitude: 10.84992,
+        longitude: 106.77172,
+      });
+
+      const requestOptions: RequestInit = {
+        method: 'POST',
+        headers: myHeaders,
+        body: raw,
+        redirect: 'follow' as RequestRedirect,
+      };
+
+      const response = await fetch(
+        'https://gw.be.com.vn/api/v1/be-marketplace/web/restaurant/detail',
+        requestOptions,
+      );
+
+      const result = await response.json();
+
+      const dto = result.data.categories.map((category) => {
+        return {
+          name: category.category_name,
+          food_items: category.items.map((item) => {
+            return {
+              image: item.item_image_compressed_web,
+              price: item.price,
+              name: item.item_name,
+              bio: item.item_details,
+              modifier_groups: item.customize_item.map((customize) => {
+                return {
+                  name: customize.customize_item_name,
+                  min: customize.customize_item_lower_limit,
+                  max: customize.customize_item_limit,
+                  modifier: customize.customize_options.map((modifier) => {
+                    return {
+                      name: modifier.customize_option_name,
+                      price: modifier.customize_price,
+                    };
+                  }),
+                };
+              }),
+            };
+          }),
+        };
+      });
+
+      return this.restaurantService.createMenus(body.restaurant_id, dto);
+    } catch (error) {
+      throw new BadRequestException(error);
+    }
+  }
 
   @Get('cuisine-categories')
   fetchCuisineCategories() {

@@ -117,7 +117,7 @@ export class ChatbotService {
       const inactiveMinutes =
         (now.getTime() - session.lastActivity.getTime()) / (1000 * 60);
 
-      if (inactiveMinutes >= 20) {
+      if (inactiveMinutes >= 10) {
         console.log(`Removing inactive chat session for user ${userId}`);
         this.chatSessions.delete(userId);
       }

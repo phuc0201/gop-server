@@ -32,6 +32,7 @@ import { ModifierService } from './modifier.service';
 import { RestaurantCategoryService } from './restaurant_category.service';
 import { CampaignService } from 'src/campaign/campaign.service';
 import { Modifier } from './entities/modifier.schema';
+import { RestaurantCategoryDto } from './dto/restaurant-category.dto';
 
 @Injectable()
 export class RestaurantService extends AccountServiceAbstract<Restaurant> {
@@ -50,6 +51,44 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
   ) {
     super(restaurantModel);
   }
+
+  async createMenus(restaurant_id, dto: RestaurantCategoryDto[]) {
+    const categories = await Promise.all(
+      dto.map(async (item) => {
+        const cateDto: CreateRestaurantCategoryDto = {
+          name: item.name,
+          food_items: [],
+          bio: '',
+        };
+
+        const category = await this.addCategory(restaurant_id, cateDto);
+
+        const foodItems = await Promise.all(
+          item.food_items.map(async (food) => {
+            const foodDto: CreateFoodItemDto = {
+              category_id: category._id,
+              name: food.name,
+              price: food.price,
+              bio: food.bio,
+              image: food.image,
+              modifier_groups: food.modifier_groups,
+            };
+
+            return await this.createFoodItem(restaurant_id, foodDto);
+          }),
+        );
+
+        return {
+          category_id: category._id,
+          category_name: category.name,
+          foodItems: foodItems,
+        };
+      }),
+    );
+
+    return categories;
+  }
+
   async getAllMenusWithRestaurantInfo(userCoords: [number, number]) {
     return await this.restaurantModel.aggregate([
       {
@@ -136,36 +175,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         },
       },
       {
-        $lookup: {
-          from: 'modifiergroups',
-          localField: 'foodItems.modifier_groups',
-          foreignField: '_id',
-          as: 'modifierGroups',
-          pipeline: [
-            {
-              $match: {
-                deleted: null,
-              },
-            },
-          ],
-        },
-      },
-      {
-        $lookup: {
-          from: 'modifiers',
-          localField: 'modifierGroups.modifier',
-          foreignField: '_id',
-          as: 'modifiers',
-          pipeline: [
-            {
-              $match: {
-                deleted: null,
-              },
-            },
-          ],
-        },
-      },
-      {
         $addFields: {
           hasCampaign: { $gt: [{ $size: '$campaigns' }, 0] },
           foodItems: {
@@ -177,35 +186,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
                 name: '$$foodItem.name',
                 price: '$$foodItem.price',
                 image: '$$foodItem.image',
-                modifier_groups: {
-                  $map: {
-                    input: {
-                      $filter: {
-                        input: '$modifierGroups',
-                        as: 'mg',
-                        cond: {
-                          $in: ['$$mg._id', '$$foodItem.modifier_groups'],
-                        },
-                      },
-                    },
-                    as: 'mg',
-                    in: {
-                      id: '$$mg._id',
-                      name: '$$mg.name',
-                      min: '$$mg.min',
-                      max: '$$mg.max',
-                      modifier: {
-                        $filter: {
-                          input: '$modifiers',
-                          as: 'mod',
-                          cond: {
-                            $in: ['$$mod._id', '$$mg.modifier'],
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
               },
             },
           },
@@ -225,16 +205,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             name: 1,
             price: 1,
             image: 1,
-            modifier_groups: {
-              id: '$_id',
-              name: 1,
-              min: 1,
-              max: 1,
-              modifier: {
-                name: 1,
-                price: 1,
-              },
-            },
           },
         },
       },

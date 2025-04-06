@@ -26,7 +26,7 @@ export class Restaurant extends Account {
   @Prop({ type: [SchemaTypes.ObjectId], ref: 'RestaurantCategory' })
   restaurant_categories: RestaurantCategory[] | string[];
 
-  @Prop({ enum: RestaurantStatus, default: RestaurantStatus.CLOSED })
+  @Prop({ enum: RestaurantStatus, default: RestaurantStatus.OPEN })
   status: RestaurantStatus;
 
   @Prop({ required: true })
@@ -35,7 +35,7 @@ export class Restaurant extends Account {
   @Prop({ type: LocationObject, index: '2dsphere' })
   location: LocationObject;
 
-  @Prop({ required: true })
+  @Prop({ default: '' })
   bio: string;
 
   @Prop({})

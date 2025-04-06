@@ -8,7 +8,9 @@ import {
   Logger,
   Res,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { CustomerService } from 'src/customer/customer.service';
@@ -37,6 +39,7 @@ export class AuthController {
     private readonly driverService: DriverService,
     private readonly restaurantService: RestaurantService,
     private readonly firebaseService: FirebaseService,
+    private readonly configService: ConfigService,
   ) {}
 
   logger = new Logger('AuthController');
@@ -56,7 +59,9 @@ export class AuthController {
             .json({ message: 'Email or phone_number is already in use' });
         }
         // this.accountService.sendNotification(account.email, account.full_name);
-        return res.status(HttpStatus.CREATED).json({ message: 'OK' });
+        return res
+          .status(HttpStatus.CREATED)
+          .json({ message: 'OK', account: account });
       })
       .catch((err) => {
         return res
@@ -114,6 +119,92 @@ export class AuthController {
   @Post('driver/signup')
   async signupDriver(@Body() body: CreateDriverDto, @Res() res: Response) {
     this.sign_up(body, res, this.driverService);
+  }
+
+  @Post('restaurant/signup/using-befood')
+  async signupRestaurantWithBeFood(
+    @Body()
+    body: {
+      restaurantIdOnBe: string;
+      phone: string;
+      email: string;
+      password: string;
+      full_name: string;
+      cuisine_categories: string[];
+      bio: string;
+    },
+    @Res() res: Response,
+  ) {
+    try {
+      const myHeaders = new Headers();
+      myHeaders.append('Content-Type', 'application/json');
+      myHeaders.append(
+        'Authorization',
+        this.configService.get<string>('BEFOOD_TOKEN'),
+      );
+      const raw = JSON.stringify({
+        restaurant_id: body.restaurantIdOnBe,
+        locale: 'vi',
+        app_version: '11269',
+        version: '1.1.269',
+        device_type: 3,
+        operator_token: '0b28e008bc323838f5ec84f718ef11e6',
+        customer_package_name: 'xyz.be.food',
+        device_token: '99d149899c4f2f3d79df1f8e73f539ef',
+        ad_id: '',
+        screen_width: 360,
+        screen_height: 640,
+        client_info: {
+          locale: 'vi',
+          app_version: '11269',
+          version: '1.1.269',
+          device_type: 3,
+          operator_token: '0b28e008bc323838f5ec84f718ef11e6',
+          customer_package_name: 'xyz.be.food',
+          device_token: '99d149899c4f2f3d79df1f8e73f539ef',
+          ad_id: '',
+          screen_width: 360,
+          screen_height: 640,
+        },
+        latitude: 10.84992,
+        longitude: 106.77172,
+      });
+
+      const requestOptions: RequestInit = {
+        method: 'POST',
+        headers: myHeaders,
+        body: raw,
+        redirect: 'follow' as RequestRedirect,
+      };
+
+      const response = await fetch(
+        'https://gw.be.com.vn/api/v1/be-marketplace/web/restaurant/detail',
+        requestOptions,
+      );
+
+      const result = await response.json();
+
+      const resInfo = result.data.restaurant_info;
+      const dto = {
+        email: body.email,
+        password: body.password,
+        phone: body.phone,
+        full_name: body.full_name,
+        cuisine_categories: body.cuisine_categories,
+        bio: body.bio,
+        restaurant_name: resInfo.name,
+        avatar: resInfo.image,
+        cover_image: resInfo.image,
+        location: {
+          type: 'Point',
+          coordinates: [resInfo.longitude, resInfo.latitude],
+          address: resInfo.address,
+        },
+      };
+      this.sign_up(dto, res, this.restaurantService);
+    } catch (error) {
+      throw new BadRequestException(error);
+    }
   }
 
   @Post('restaurant/signup')
