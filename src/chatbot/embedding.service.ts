@@ -4,7 +4,8 @@ import axios from 'axios';
 @Injectable()
 export class EmbeddingService {
   private ai: GoogleGenAI;
-  private readonly API_URL = 'http://localhost:8000/embed';
+  private readonly API_URL =
+    'https://phuc0201-gopfood-embedding.hf.space/embed';
 
   constructor() {
     this.ai = new GoogleGenAI({

@@ -4,7 +4,7 @@ import { QdrantClient } from '@qdrant/js-client-rest';
 @Injectable()
 export class VectorStoreService {
   private client: QdrantClient;
-  private collectionName = 'chatbot-food-collection';
+  private collectionName = 'chatbot-collection';
   constructor(private readonly configService: ConfigService) {
     this.client = new QdrantClient({
       url: this.configService.get('QDRANT_URL'),
@@ -54,9 +54,9 @@ export class VectorStoreService {
   async searchVector(vector: number[]) {
     const result = await this.client.search(this.collectionName, {
       vector,
-      limit: 10,
+      limit: 100,
       with_payload: true,
-      score_threshold: 0.86,
+      score_threshold: 0.8,
       params: {
         hnsw_ef: 3000,
         exact: true,

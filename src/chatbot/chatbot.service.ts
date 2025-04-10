@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createUserContent, GoogleGenAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { RestaurantService } from 'src/restaurant/restaurant.service';
 import { SystemPolicy } from './prompts/system-policy.prompt';
 import { Cron } from '@nestjs/schedule';
 import { EmbeddingService } from './embedding.service';
 import { VectorStoreService } from './vertor_store.service';
 import { v4 as uuidv4 } from 'uuid';
+
 interface ChatSession {
   chat: any;
   lastActivity: Date;
@@ -94,7 +95,7 @@ export class ChatbotService {
         payload: {
           restaurant_id: restaurant._id,
           restaurant_name: restaurant.restaurant_name,
-          addres: restaurant.location['address'],
+          address: restaurant.location['address'],
           food_id: food.id,
           food_name: food.name,
           price: food.price,
@@ -149,27 +150,19 @@ export class ChatbotService {
 
   async sendMessage(userId: string, message: string) {
     const foods = await this.suggestFood(message);
-
     let chatSession = this.chatSessions.get(userId);
     if (!chatSession) {
       const prompts = `
         ${SystemPolicy.policy}
-
         ${SystemPolicy.format_response}
-
         **Danh sách món ăn gốc:**
-
         ${JSON.stringify(foods.map((food) => food))}
-
         ***********************
-
         Dựa vào danh sách món ăn để tìm ra nhà hàng có món ăn phù hợp với yêu cầu của khách
-
         Nếu danh sách rỗng thì hãy đưa ra một vài đề xuất cho khách chọn
-        
-
         Câu hỏi mới của người dùng: ${message}
       `;
+
       const session = this.ai.chats.create({
         model: 'gemini-2.0-flash',
         config: {
@@ -177,13 +170,14 @@ export class ChatbotService {
         },
       });
 
+      const response = await session.sendMessage({ message: prompts });
+      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
+
       this.chatSessions.set(userId, {
         chat: session,
         lastActivity: new Date(),
       });
 
-      const response = await session.sendMessage({ message: prompts });
-      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
       const restaurants = await this.restaurantService.getRestaurantsForChatbot(
         parsedResponse.restaurants,
       );
@@ -195,20 +189,19 @@ export class ChatbotService {
     } else {
       const prompts = `
         **Thêm các món sau vào danh sách món ăn gốc:**
-
         ${JSON.stringify(foods.map((food) => food))}
-        
         ******************************************
-
+        Dựa vào danh sách món ăn mới và và các món ăn khác trong lịch sử trò chuyện để đưa ra đề xuất cho người dùng
         Câu hỏi mới của người dùng: ${message}
       `;
       const response = await chatSession.chat.sendMessage({ message: prompts });
+      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
+
       this.chatSessions.set(userId, {
         ...chatSession,
         lastActivity: new Date(),
       });
 
-      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
       const restaurants = await this.restaurantService.getRestaurantsForChatbot(
         parsedResponse.restaurants,
       );
