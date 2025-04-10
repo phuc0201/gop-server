@@ -89,24 +89,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     return categories;
   }
 
-  async getAllMenusWithRestaurantInfo(userCoords: [number, number]) {
+  async getAllMenusWithRestaurantInfo() {
     return await this.restaurantModel.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: 'Point',
-            coordinates: userCoords,
-          },
-          distanceField: 'distance',
-          spherical: true,
-          maxDistance: 20000, // 20km in meters
-        },
-      },
-      {
-        $match: {
-          deleted: null,
-        },
-      },
       {
         $lookup: {
           from: 'reviews',
@@ -186,6 +170,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
                 name: '$$foodItem.name',
                 price: '$$foodItem.price',
                 image: '$$foodItem.image',
+                bio: '$$foodItem.bio',
               },
             },
           },
@@ -197,7 +182,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           restaurant_name: 1,
           location: 1,
           avatar: 1,
-          distance: 1,
           rating: 1,
           hasCampaign: 1,
           foodItems: {
@@ -205,6 +189,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             name: 1,
             price: 1,
             image: 1,
+            bio: 1,
           },
         },
       },
@@ -272,6 +257,17 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         _id: { $in: resIDs },
       })
       .select('restaurant_name avatar status location')
+      .lean()
+      .exec();
+    return restaurants;
+  }
+
+  async getRestaurantsForChatbot(resIDs: string) {
+    const restaurants = await this.restaurantModel
+      .find({
+        _id: { $in: resIDs },
+      })
+      .select('restaurant_name avatar status')
       .lean()
       .exec();
     return restaurants;
@@ -652,6 +648,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           isClosed: res.status === RestaurantStatus.CLOSED,
           distance: distancesAndDurations[index].elements[0].distance.value,
           duration: distancesAndDurations[index].elements[0].duration.value,
+          // distance: 0,
+          // duration: 0,
           hasCampaign: hasCmp,
         };
       })
@@ -743,6 +741,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
           cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
           distance: distancesAndDurations[index].elements[0].distance.value,
           duration: distancesAndDurations[index].elements[0].duration.value,
+          // distance: 0,
+          // duration: 0,
           hasCampaign: hasCmp,
           rating: review ? review.averageRating : 0,
         };

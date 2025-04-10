@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenAI } from '@google/genai';
+import { createUserContent, GoogleGenAI } from '@google/genai';
 import { RestaurantService } from 'src/restaurant/restaurant.service';
 import { SystemPolicy } from './prompts/system-policy.prompt';
 import { Cron } from '@nestjs/schedule';
-
+import { EmbeddingService } from './embedding.service';
+import { VectorStoreService } from './vertor_store.service';
+import { v4 as uuidv4 } from 'uuid';
 interface ChatSession {
-  coords: [number, number];
   chat: any;
   lastActivity: Date;
 }
@@ -20,58 +21,125 @@ export class ChatbotService {
   constructor(
     private readonly configService: ConfigService,
     private readonly restaurantService: RestaurantService,
+    private readonly embeddingService: EmbeddingService,
+    private readonly vertorStoreService: VectorStoreService,
   ) {
     this.ai = new GoogleGenAI({
       apiKey: this.configService.get<string>('GEMINI_API'),
     });
   }
 
-  async start(userId: string, userCoords: [number, number]) {
-    const existingSession = this.chatSessions.get(userId);
-    if (existingSession) {
-      if (
-        JSON.stringify(existingSession.coords) === JSON.stringify(userCoords)
-      ) {
-        console.log('Chat session already exists for this user');
-        return {
-          message: 'bot already started',
-        };
-      } else {
-        this.chatSessions.delete(userId);
-      }
+  splitIntoBatches<T>(items: T[], batchSize: number): T[][] {
+    const batches = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+      batches.push(items.slice(i, i + batchSize));
     }
+    return batches;
+  }
 
-    const menus =
-      await this.restaurantService.getAllMenusWithRestaurantInfo(userCoords);
-
-    const session: ChatSession = {
-      coords: userCoords,
-      chat: this.ai.chats.create({
-        model: 'gemini-2.0-flash',
-        config: {
-          temperature: 0.4,
+  async streamChat() {
+    const session = await this.ai.live.connect({
+      model: 'gemini-2.0-flash',
+      callbacks: {
+        onopen: () => {
+          console.log('Connected to the socket.');
         },
-      }),
-      lastActivity: new Date(),
-    };
-
-    await session.chat.sendMessage({
-      message: `
-
-      ${SystemPolicy.policy}
-
-      Dưới đây là danh sách món ăn:
-      ${JSON.stringify(menus, null, 2)}
-
-      ${SystemPolicy.format_response}
-      `,
+        onmessage: (message) => {
+          console.log('Received message:', message);
+        },
+        onerror: (error) => {
+          console.error('Error:', error);
+        },
+        onclose: (e: CloseEvent) => {
+          console.log('Connection closed.');
+        },
+      },
     });
 
-    this.chatSessions.set(userId, session);
+    return session;
+  }
+
+  async createCollection() {
+    return await this.vertorStoreService.createCollection();
+  }
+
+  async start() {
+    const menus = await this.restaurantService.getAllMenusWithRestaurantInfo();
+
+    const foodItems = menus.flatMap((restaurant) =>
+      restaurant.foodItems.map((food) => ({
+        food: food,
+        restaurant: {
+          _id: restaurant._id,
+          restaurant_name: restaurant.restaurant_name,
+          location: restaurant.location,
+        },
+      })),
+    );
+
+    const points: {
+      id: string;
+      vector: number[];
+      payload: any;
+    }[] = [];
+
+    for (const { food, restaurant } of foodItems) {
+      const prompt = `món ${food.name} - mô tả ${food.bio} - bán tại ${restaurant.restaurant_name}`;
+
+      const embedding = await this.embeddingService.getEmbedding(prompt);
+
+      points.push({
+        id: uuidv4(),
+        vector: embedding,
+        payload: {
+          restaurant_id: restaurant._id,
+          restaurant_name: restaurant.restaurant_name,
+          addres: restaurant.location['address'],
+          food_id: food.id,
+          food_name: food.name,
+          price: food.price,
+        },
+      });
+    }
+
+    const batches = this.splitIntoBatches(points, 100);
+
+    for (const batch of batches) {
+      await this.vertorStoreService.upsertVector(batch);
+    }
 
     return {
-      message: 'bot started',
+      message: `Upserted ${points.length} items in ${batches.length} batches`,
     };
+  }
+
+  async suggestFood(query: string) {
+    const embedding = await this.embeddingService.getEmbedding(query);
+    const results = await this.vertorStoreService.searchVector(embedding);
+
+    const restaurantsMap = new Map<string, any>();
+
+    results.forEach((result) => {
+      const restaurantId = result.payload.restaurant_id as string;
+      if (restaurantId) {
+        if (!restaurantsMap.has(restaurantId)) {
+          restaurantsMap.set(restaurantId, {
+            restaurant_id: restaurantId,
+            retaurant_name: result.payload.restaurant_name,
+            restaurant_address: result.payload.address,
+            fooditems: [],
+          });
+        }
+
+        restaurantsMap
+          .get(restaurantId)
+          .fooditems.push(
+            `name: ${result.payload.food_name} - price: ${result.payload.price} - score_similar: ${result.score};`,
+          );
+      }
+    });
+
+    return Array.from(restaurantsMap.values());
   }
 
   extractJsonString(input: string): string {
@@ -79,31 +147,75 @@ export class ChatbotService {
     return match ? match[0] : '{}';
   }
 
-  async sendMessage(
-    userId: string,
-    message: string,
-    userCoords: [number, number],
-  ) {
+  async sendMessage(userId: string, message: string) {
+    const foods = await this.suggestFood(message);
+
     let chatSession = this.chatSessions.get(userId);
+    if (!chatSession) {
+      const prompts = `
+        ${SystemPolicy.policy}
 
-    if (
-      !chatSession ||
-      (chatSession &&
-        JSON.stringify(chatSession.coords) !== JSON.stringify(userCoords))
-    ) {
-      await this.start(userId, userCoords);
-      return await this.sendMessage(userId, message, userCoords);
-    } else if (
-      JSON.stringify(chatSession.coords) === JSON.stringify(userCoords)
-    ) {
-      const response = await chatSession.chat.sendMessage({ message });
-      chatSession.lastActivity = new Date();
+        ${SystemPolicy.format_response}
 
-      const responseText = this.extractJsonString(response.text);
-      return JSON.parse(responseText);
-    } else {
+        **Danh sách món ăn gốc:**
+
+        ${JSON.stringify(foods.map((food) => food))}
+
+        ***********************
+
+        Dựa vào danh sách món ăn để tìm ra nhà hàng có món ăn phù hợp với yêu cầu của khách
+
+        Nếu danh sách rỗng thì hãy đưa ra một vài đề xuất cho khách chọn
+        
+
+        Câu hỏi mới của người dùng: ${message}
+      `;
+      const session = this.ai.chats.create({
+        model: 'gemini-2.0-flash',
+        config: {
+          temperature: 0.5,
+        },
+      });
+
+      this.chatSessions.set(userId, {
+        chat: session,
+        lastActivity: new Date(),
+      });
+
+      const response = await session.sendMessage({ message: prompts });
+      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
+      const restaurants = await this.restaurantService.getRestaurantsForChatbot(
+        parsedResponse.restaurants,
+      );
+
       return {
-        message: 'GoPee đang cập nhật menu bạn quay lại sau nhé',
+        message: parsedResponse.message,
+        restaurants: restaurants,
+      };
+    } else {
+      const prompts = `
+        **Thêm các món sau vào danh sách món ăn gốc:**
+
+        ${JSON.stringify(foods.map((food) => food))}
+        
+        ******************************************
+
+        Câu hỏi mới của người dùng: ${message}
+      `;
+      const response = await chatSession.chat.sendMessage({ message: prompts });
+      this.chatSessions.set(userId, {
+        ...chatSession,
+        lastActivity: new Date(),
+      });
+
+      const parsedResponse = JSON.parse(this.extractJsonString(response.text));
+      const restaurants = await this.restaurantService.getRestaurantsForChatbot(
+        parsedResponse.restaurants,
+      );
+
+      return {
+        message: parsedResponse.message,
+        restaurants: restaurants,
       };
     }
   }
