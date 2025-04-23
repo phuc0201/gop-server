@@ -608,8 +608,8 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
     const [distancesAndDurations, avgRatings, campaigns] = await Promise.all([
       this.vietmapService.getMultipleDistanceNDuration(
+        customerLocation,
         restaurants.map((res) => res.location),
-        [customerLocation],
         VehicleType.BIKE,
       ),
       this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
@@ -617,7 +617,6 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         restaurants.map((res) => res.id),
       ),
     ]);
-
     // const [avgRatings, campaigns] = await Promise.all([
     //   this.calculateRestaurantAverageRating(restaurants.map((res) => res.id)),
     //   this.campaignService.getCampaignsByRestaurantIds(
@@ -646,10 +645,12 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
             (cat: any) => cat.name,
           ),
           isClosed: res.status === RestaurantStatus.CLOSED,
-          distance: distancesAndDurations[index].elements[0].distance.value,
-          duration: distancesAndDurations[index].elements[0].duration.value,
+          // distance: distancesAndDurations[index].elements[0].distance.value,
+          // duration: distancesAndDurations[index].elements[0].duration.value,
           // distance: 0,
           // duration: 0,
+          distance: distancesAndDurations.distances[index][0],
+          duration: distancesAndDurations.durations[index][0],
           hasCampaign: hasCmp,
         };
       })
@@ -658,6 +659,22 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     combinedRestaurants.sort((a, b) => a.distance - b.distance);
 
     return combinedRestaurants;
+  }
+
+  getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const toRad = (value) => (value * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+
+    return distance;
   }
 
   async getRestaurantsByCustomer(
@@ -691,6 +708,16 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       };
     }
 
+    matchConditions.location = {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: coordinates,
+        },
+        $maxDistance: 50000,
+      },
+    };
+
     const restaurants = await this.restaurantModel
       .find(matchConditions)
       .select('restaurant_name avatar cuisine_categories location')
@@ -704,23 +731,12 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
       };
 
     const restaurantIds = restaurants.map((res) => res.id);
-    const locations = restaurants.map((res) => res.location);
     const customerLocation = new LocationObject(coordinates, '');
 
-    const [distancesAndDurations, campaigns, avgRatings] = await Promise.all([
-      this.vietmapService.getMultipleDistanceNDuration(
-        locations,
-        [customerLocation],
-        VehicleType.BIKE,
-      ),
+    const [campaigns, avgRatings] = await Promise.all([
       this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
       this.calculateRestaurantAverageRating(restaurantIds),
     ]);
-
-    // const [campaigns, avgRatings] = await Promise.all([
-    //   this.campaignService.getCampaignsByRestaurantIds(restaurantIds),
-    //   this.calculateRestaurantAverageRating(restaurantIds),
-    // ]);
 
     const restaurantWithCampaigns = new Set(
       campaigns.map((cmp) =>
@@ -730,7 +746,7 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
     let combinedRestaurants = await Promise.all(
       restaurants.map(async (res, index) => {
-        const { location, cuisine_categories, ...newRes } = { ...res.toJSON() };
+        const { cuisine_categories, ...newRes } = { ...res.toJSON() };
         const hasCmp = restaurantWithCampaigns.has(null)
           ? true
           : restaurantWithCampaigns.has(res.id);
@@ -739,10 +755,13 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
         return {
           ...newRes,
           cuisine_categories: cuisine_categories.map((cat: any) => cat.name),
-          distance: distancesAndDurations[index].elements[0].distance.value,
-          duration: distancesAndDurations[index].elements[0].duration.value,
-          // distance: 0,
-          // duration: 0,
+          distance: this.getDistance(
+            res.location.coordinates[1],
+            res.location.coordinates[0],
+            customerLocation.coordinates[1],
+            customerLocation.coordinates[0],
+          ),
+          duration: 0,
           hasCampaign: hasCmp,
           rating: review ? review.averageRating : 0,
         };
@@ -787,10 +806,26 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
     const endIndex = startIndex + limit;
     const dataPage = combinedRestaurants.slice(startIndex, endIndex);
 
+    const distancesAndDurations =
+      await this.vietmapService.getMultipleDistanceNDuration(
+        customerLocation,
+        dataPage.map((res) => res.location),
+        VehicleType.BIKE,
+      );
+
+    const dataWithDistancesDurations = dataPage.map((data, index) => {
+      const { location, ...rest } = data;
+      return {
+        ...rest,
+        distance: distancesAndDurations.distances[index][0],
+        duration: distancesAndDurations.durations[index][0],
+      };
+    });
+
     return {
       currPage: page,
       totalPage: totalPages,
-      data: dataPage,
+      data: dataWithDistancesDurations,
     };
   }
 
@@ -863,7 +898,28 @@ export class RestaurantService extends AccountServiceAbstract<Restaurant> {
 
   async getCuisineCategories() {
     const cuisines = await this.cuisineModel.find();
-    return cuisines;
+
+    const restaurants = await this.restaurantModel
+      .find()
+      .select('cuisine_categories')
+      .lean();
+
+    const cuisineIdsInRestaurants = new Set(
+      restaurants.flatMap((restaurant) =>
+        restaurant.cuisine_categories.map((id) => id.toString()),
+      ),
+    );
+
+    const sortedCuisines = cuisines.sort((a, b) => {
+      const aInRestaurant = cuisineIdsInRestaurants.has(a._id.toString());
+      const bInRestaurant = cuisineIdsInRestaurants.has(b._id.toString());
+
+      if (aInRestaurant && !bInRestaurant) return -1;
+      if (!aInRestaurant && bInRestaurant) return 1;
+      return 0;
+    });
+
+    return sortedCuisines;
   }
 
   async getInfo(id: string) {

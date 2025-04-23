@@ -13,28 +13,94 @@ export class VietMapService {
     destination: LocationObject,
     type: VehicleType,
   ) {
-    const vehicle = type;
+    const vehicle = type === VehicleType.BIKE ? 'motorcycle' : 'car';
 
     const response = await firstValueFrom(
       this.httpService.get(
-        `/Direction?origin=${origin.coordinates[1]},${origin.coordinates[0]}&destination=${destination.coordinates[1]},${destination.coordinates[0]}&vehicle=${vehicle}`,
+        `/route?api-version=1.1&point=${origin.coordinates[1]},${origin.coordinates[0]}&point=${destination.coordinates[1]},${destination.coordinates[0]}&vehicle=${vehicle}`,
       ),
     ).then((res) => res.data);
 
     return {
-      distance: response.routes[0].legs[0].distance.value,
-      duration: response.routes[0].legs[0].duration.value,
+      distance: response.paths[0].distance,
+      duration: response.paths[0].time / 1000,
     };
   }
 
   async getMultipleDistanceNDuration(
+    destinations: LocationObject,
+    origins: LocationObject[],
+    type: VehicleType,
+  ) {
+    const vehicle = type === VehicleType.BIKE ? 'motorcycle' : 'car';
+    const pickup = origins.map((or) => {
+      return {
+        ...or,
+        coordinates: [or.coordinates[1], or.coordinates[0]],
+      };
+    });
+    const dropoff = [destinations.coordinates[1], destinations.coordinates[0]];
+    const points = [
+      dropoff.join(','),
+      ...pickup.map((pickup) => pickup.coordinates.join(',')),
+    ];
+
+    const sources = origins.map((_, index) => index + 1).join(';');
+
+    const url = this.buildMatrixUrl({
+      points,
+      sources: sources,
+      destinations: '0',
+      vehicle,
+      apiVersion: '1.1',
+    });
+
+    const res = await firstValueFrom(this.httpService.get(url)).then(
+      (res) => res.data,
+    );
+
+    return {
+      distances: res.distances,
+      durations: res.durations,
+    };
+  }
+
+  private buildMatrixUrl(config: {
+    points: string[];
+    sources: string;
+    destinations: string;
+    vehicle: string;
+    apiVersion: string;
+  }) {
+    const params = new URLSearchParams();
+    params.append('api-version', config.apiVersion);
+
+    config.points.forEach((point) => {
+      params.append('point', point);
+    });
+
+    params.append('sources', config.sources);
+    params.append('destinations', config.destinations);
+    params.append('points_encoded', 'false');
+    params.append('vehicle', config.vehicle);
+
+    const paramsString = params
+      .toString()
+      .replace(/%2C/g, ',')
+      .replace(/%3D/g, '=')
+      .replace(/%26/g, '&');
+
+    return `/matrix?${paramsString}`;
+  }
+
+  async getMultipleDistanceNDurationForGOONG(
     origins: LocationObject[],
     destinations: LocationObject[],
     type: VehicleType,
   ) {
     const vehicle = type;
 
-    const url = this.buildMatrixUrl({
+    const url = this.buildMatrixUrlForGOONG({
       origins,
       destinations,
       vehicle,
@@ -47,7 +113,7 @@ export class VietMapService {
     return res.rows;
   }
 
-  private buildMatrixUrl(config: {
+  private buildMatrixUrlForGOONG(config: {
     origins: LocationObject[];
     destinations: LocationObject[];
     vehicle: string;

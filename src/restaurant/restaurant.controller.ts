@@ -209,7 +209,7 @@ export class RestaurantController {
 
       return result;
     } catch (error) {
-      throw new BadRequestException('Failed to fetch nearby restaurants');
+      throw new BadRequestException(error);
     }
   }
 

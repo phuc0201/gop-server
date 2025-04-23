@@ -7,9 +7,9 @@ import { ConfigService } from '@nestjs/config';
   imports: [
     HttpModule.registerAsync({
       useFactory: async (configService: ConfigService) => ({
-        baseURL: 'https://rsapi.goong.io',
+        baseURL: 'https://maps.vietmap.vn/api',
         params: {
-          api_key: configService.get<string>('GOONG_API_KEY'),
+          apikey: configService.get<string>('VIETMAP_API_KEY'),
         },
       }),
       inject: [ConfigService],
